@@ -9,7 +9,9 @@ export const Navbar: React.FC = () => {
     unreadNotificationCount,
     setIsSearchOpen,
     setIsNotificationsOpen,
-    isNotificationsOpen
+    isNotificationsOpen,
+    currentUser,
+    logoutUser
   } = useApp();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -228,18 +230,24 @@ export const Navbar: React.FC = () => {
               )}
             </button>
 
-            {/* Profile Dropdown — Minimal & Clean (SJ · Sarah Jenkins · Senior Underwriter) */}
+            {/* Profile Dropdown — Minimal & Clean */}
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className="flex items-center gap-2.5 p-1 rounded-lg hover:bg-surface-elevated transition-colors"
               >
                 <div className="w-7 h-7 rounded-full bg-surface-elevated border border-surface-border text-brand-teal flex items-center justify-center text-xs font-bold font-mono">
-                  SJ
+                  {currentUser?.fullName
+                    ? currentUser.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                    : 'SJ'}
                 </div>
                 <div className="hidden lg:flex flex-col text-left">
-                  <span className="text-xs font-semibold text-white leading-tight">Sarah Jenkins</span>
-                  <span className="text-[10px] text-petText-muted leading-tight font-mono">Senior Underwriter</span>
+                  <span className="text-xs font-semibold text-white leading-tight">
+                    {currentUser?.fullName || 'Sarah Jenkins'}
+                  </span>
+                  <span className="text-[10px] text-petText-muted leading-tight font-mono">
+                    {currentUser?.role || 'Senior Underwriter'}
+                  </span>
                 </div>
                 <ChevronDown size={12} className="text-petText-dim hidden lg:inline" />
               </button>
@@ -251,10 +259,14 @@ export const Navbar: React.FC = () => {
                   onMouseLeave={() => setIsUserMenuOpen(false)}
                 >
                   <div className="px-3.5 py-2 border-b border-surface-border">
-                    <p className="text-xs font-semibold text-white">Sarah Jenkins</p>
-                    <p className="text-[10px] text-petText-muted font-mono">Senior Underwriting Officer</p>
+                    <p className="text-xs font-semibold text-white">
+                      {currentUser?.fullName || 'Sarah Jenkins'}
+                    </p>
+                    <p className="text-[10px] text-petText-muted font-mono">
+                      {currentUser?.role || 'Senior Underwriting Officer'}
+                    </p>
                     <div className="mt-1 text-[10px] font-mono text-brand-teal">
-                      Authority: ₹5,00,000 / claim
+                      Authority: ₹{(currentUser?.authorityLimitInr || 500000).toLocaleString('en-IN')} / claim
                     </div>
                   </div>
                   <div className="py-1 text-xs">
@@ -286,7 +298,10 @@ export const Navbar: React.FC = () => {
                   <div className="border-t border-surface-border pt-1">
                     <Link
                       to="/sign-in"
-                      onClick={() => setIsUserMenuOpen(false)}
+                      onClick={() => {
+                        logoutUser();
+                        setIsUserMenuOpen(false);
+                      }}
                       className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-rose-400 hover:bg-surface-elevated transition-colors"
                     >
                       <LogOut size={13} />

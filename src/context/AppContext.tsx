@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Pet, Assessment, Claim, NotificationItem, EvidenceItem } from '../types';
-import { MOCK_PETS, MOCK_ASSESSMENTS, MOCK_CLAIMS, MOCK_NOTIFICATIONS } from '../data/mockData';
 import { assessmentService } from '../services/assessmentService';
 import { petService } from '../services/petService';
 import { claimService } from '../services/claimService';
+import { operationsService } from '../services/operationsService';
+import { authService, AuthResponse } from '../services/authService';
 
 interface AppContextType {
   pets: Pet[];
@@ -12,6 +13,9 @@ interface AppContextType {
   notifications: NotificationItem[];
   unreadNotificationCount: number;
   isLoadingBackend: boolean;
+  backendError: string | null;
+  currentUser: AuthResponse['user'] | null;
+  logoutUser: () => void;
   
   // UI States
   isSearchOpen: boolean;
@@ -42,7 +46,7 @@ interface AppContextType {
     decision: 'Approve' | 'Request Information' | 'Refer for Review',
     notes: string,
     stipulation?: string
-  ) => void;
+  ) => Promise<void>;
   
   // Claim actions
   recordClaimDecision: (
@@ -50,13 +54,13 @@ interface AppContextType {
     status: 'Approved' | 'Adjusted' | 'Information Requested' | 'Referred to Senior Adjuster',
     notes: string,
     approvedAmount?: number
-  ) => void;
+  ) => Promise<void>;
 
   // New assessment creation
-  addNewAssessment: (assessment: Assessment, pet: Pet) => void;
+  addNewAssessment: (assessment: Assessment, pet: Pet) => Promise<void>;
   
   // Notifications actions
-  markNotificationAsRead: (id: string) => void;
+  markNotificationAsRead: (id: string) => Promise<void>;
   markAllNotificationsAsRead: () => void;
 
   // Search helper
@@ -70,11 +74,13 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [pets, setPets] = useState<Pet[]>(MOCK_PETS);
-  const [assessments, setAssessments] = useState<Assessment[]>(MOCK_ASSESSMENTS);
-  const [claims, setClaims] = useState<Claim[]>(MOCK_CLAIMS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
-  const [isLoadingBackend, setIsLoadingBackend] = useState<boolean>(false);
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [currentUser, setCurrentUser] = useState<AuthResponse['user'] | null>(null);
+  const [isLoadingBackend, setIsLoadingBackend] = useState<boolean>(true);
+  const [backendError, setBackendError] = useState<string | null>(null);
   
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -99,21 +105,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     evidence: null
   });
 
-  // Load from backend services on initial mount
+  // Load from live backend services on initial mount
   const refreshData = async () => {
     setIsLoadingBackend(true);
+    setBackendError(null);
     try {
-      const [fetchedPets, fetchedAssessments, fetchedClaims] = await Promise.all([
-        petService.getPets(),
-        assessmentService.getAssessments(),
-        claimService.getClaims()
+      const [fetchedPets, fetchedAssessments, fetchedClaims, fetchedNotifs, userProfile] = await Promise.all([
+        petService.getPets().catch(() => [] as Pet[]),
+        assessmentService.getAssessments().catch(() => [] as Assessment[]),
+        claimService.getClaims().catch(() => [] as Claim[]),
+        operationsService.getNotifications().catch(() => [] as NotificationItem[]),
+        authService.getCurrentUser().catch(() => null)
       ]);
 
-      if (fetchedPets && fetchedPets.length > 0) setPets(fetchedPets);
-      if (fetchedAssessments && fetchedAssessments.length > 0) setAssessments(fetchedAssessments);
-      if (fetchedClaims && fetchedClaims.length > 0) setClaims(fetchedClaims);
-    } catch (err) {
-      console.warn('[PETRAILS] Backend not responding yet. Using local state.', err);
+      setPets(fetchedPets || []);
+      setAssessments(fetchedAssessments || []);
+      setClaims(fetchedClaims || []);
+      setNotifications(fetchedNotifs || []);
+      setCurrentUser(userProfile);
+    } catch (err: any) {
+      const msg = err?.message || 'Could not load enterprise data from backend.';
+      setBackendError(msg);
+      console.error('[PETRAILS] Backend sync error:', err);
     } finally {
       setIsLoadingBackend(false);
     }
@@ -122,6 +135,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     refreshData();
   }, []);
+
+  const logoutUser = () => {
+    authService.logout();
+    setCurrentUser(null);
+  };
 
   const openRequestInfoModal = (assessmentId: string, petName: string, gapTitle?: string) => {
     setRequestInfoModal({
@@ -150,177 +168,155 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const recordUnderwriterDecision = (
+  const recordUnderwriterDecision = async (
     assessmentId: string,
     decision: 'Approve' | 'Request Information' | 'Refer for Review',
     notes: string,
     stipulation?: string
   ) => {
-    // 1. Optimistic Local State Update
-    setAssessments(prev =>
-      prev.map(asm => {
-        if (asm.id !== assessmentId) return asm;
+    const actorName = currentUser?.fullName || 'Sarah Jenkins';
 
-        const newHistoryEntry = {
-          id: `dh-${Date.now()}`,
-          action: decision,
-          user: 'Sarah Jenkins',
-          role: 'Senior Underwriting Officer',
-          timestamp: new Date().toLocaleString('en-IN', {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-            hour12: false
-          }) + ' IST',
-          notes: notes || `Recorded underwriter decision: ${decision}.`,
-          ruleScoreAtTime: asm.ruleScore,
-          mlScoreAtTime: asm.mlScore
-        };
-
-        const updatedStatus =
-          decision === 'Approve'
-            ? 'Approved'
-            : decision === 'Request Information'
-            ? 'Information Requested'
-            : 'Referred';
-
-        const updatedStipulations = stipulation 
-          ? [...(asm.underwriterDecision?.stipulations || []), stipulation]
-          : asm.underwriterDecision?.stipulations;
-
-        return {
-          ...asm,
-          status: updatedStatus as Assessment['status'],
-          lastUpdated: 'Just now',
-          underwriterDecision: {
-            recommendation: asm.riskLevel,
-            selectedDecision: decision,
-            underwriterNotes: notes,
-            stipulations: updatedStipulations,
-            lastModifiedBy: 'Sarah Jenkins',
-            lastModifiedAt: 'Just now'
-          },
-          decisionHistory: [newHistoryEntry, ...(asm.decisionHistory || [])]
-        };
-      })
-    );
-
-    // Also update pet policy status if approved
-    setPets(prev =>
-      prev.map(p => {
-        const matchingAsm = assessments.find(a => a.id === assessmentId);
-        if (matchingAsm && p.id === matchingAsm.petId) {
-          return {
-            ...p,
-            policyStatus: decision === 'Approve' ? 'Active' : 'Under Review'
-          };
-        }
-        return p;
-      })
-    );
-
-    // 2. Dispatch to Backend Service
-    assessmentService.recordDecision(assessmentId, {
+    // 1. Dispatch directly to live Backend Service (persists in MongoDB Atlas)
+    const result = await assessmentService.recordDecision(assessmentId, {
       decision,
       notes,
       stipulation,
-      user: 'Sarah Jenkins'
-    }).catch(err => {
-      console.warn('[PETRAILS] Backend decision sync error (fallback active)', err);
+      user: actorName
     });
 
-    // Add notification
-    const currentAsm = assessments.find(a => a.id === assessmentId);
-    if (currentAsm) {
-      setNotifications(prev => [
-        {
-          id: `notif-${Date.now()}`,
-          title: `Decision recorded for ${currentAsm.petName}`,
-          description: `Sarah Jenkins recorded: ${decision}. Audit log updated.`,
-          timestamp: 'Just now',
-          read: false,
-          priority: 'medium',
-          link: `/assessments/${assessmentId}`,
-          type: 'assessment'
-        },
-        ...prev
-      ]);
+    if (result && result.success) {
+      // 2. Update state reflecting confirmed MongoDB change
+      const newHistoryEntry = result.decision;
+      const updatedStatus =
+        decision === 'Approve'
+          ? 'Approved'
+          : decision === 'Request Information'
+          ? 'Information Requested'
+          : 'Referred';
+
+      setAssessments(prev =>
+        prev.map(asm => {
+          if (asm.id !== assessmentId) return asm;
+
+          const currentStipulations = asm.underwriterDecision?.stipulations || [];
+          const updatedStipulations = stipulation
+            ? [...currentStipulations, stipulation]
+            : currentStipulations;
+
+          return {
+            ...asm,
+            status: updatedStatus as Assessment['status'],
+            lastUpdated: 'Just now',
+            underwriterDecision: {
+              recommendation: asm.riskLevel,
+              selectedDecision: decision,
+              underwriterNotes: notes,
+              stipulations: updatedStipulations,
+              lastModifiedBy: actorName,
+              lastModifiedAt: 'Just now'
+            },
+            decisionHistory: [newHistoryEntry, ...(asm.decisionHistory || [])]
+          };
+        })
+      );
+
+      // Update pet policy status in memory if approved
+      if (decision === 'Approve') {
+        const matchingAsm = assessments.find(a => a.id === assessmentId);
+        if (matchingAsm) {
+          setPets(prev =>
+            prev.map(p =>
+              p.id === matchingAsm.petId
+                ? { ...p, policyStatus: 'Active' as const }
+                : p
+            )
+          );
+        }
+      }
+
+      // Record notification
+      const currentAsm = assessments.find(a => a.id === assessmentId);
+      const notifItem: NotificationItem = {
+        id: `notif-${Date.now()}`,
+        title: `Decision recorded for ${currentAsm?.petName || 'Application'}`,
+        description: `${actorName} recorded: ${decision}. Audit log updated.`,
+        timestamp: 'Just now',
+        read: false,
+        priority: 'medium',
+        link: `/assessments/${assessmentId}`,
+        type: 'assessment'
+      };
+      setNotifications(prev => [notifItem, ...prev]);
+      operationsService.createNotification(notifItem).catch(console.warn);
     }
   };
 
-  const recordClaimDecision = (
+  const recordClaimDecision = async (
     claimId: string,
     status: 'Approved' | 'Adjusted' | 'Information Requested' | 'Referred to Senior Adjuster',
     notes: string,
     approvedAmount?: number
   ) => {
-    // 1. Optimistic Local Update
-    setClaims(prev =>
-      prev.map(c => {
-        if (c.id !== claimId) return c;
-        const finalStatus =
-          status === 'Approved' || status === 'Adjusted'
-            ? 'Approved'
-            : status === 'Information Requested'
-            ? 'Under Review'
-            : 'Attention Required';
+    const actorName = currentUser?.fullName || 'Sarah Jenkins (Senior Underwriting & Claims Officer)';
 
-        return {
-          ...c,
-          status: finalStatus as Claim['status'],
-          adjusterDecision: {
-            status,
-            approvedAmountInr: approvedAmount ?? (status === 'Approved' ? c.amountInr * 0.9 : 0),
-            notes,
-            decidedBy: 'Sarah Jenkins (Senior Underwriting & Claims Officer)',
-            timestamp: new Date().toLocaleString('en-IN', {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-              hour12: false
-            }) + ' IST'
-          }
-        };
-      })
-    );
-
-    // 2. Dispatch to Backend Service
-    claimService.recordDecision(claimId, {
+    // 1. Dispatch to live Backend Service (persists in MongoDB Atlas)
+    const result = await claimService.recordDecision(claimId, {
       status,
       notes,
       approvedAmountInr: approvedAmount,
-      decidedBy: 'Sarah Jenkins (Senior Underwriting & Claims Officer)'
-    }).catch(err => {
-      console.warn('[PETRAILS] Backend claim decision sync error', err);
+      decidedBy: actorName
     });
+
+    if (result && result.success) {
+      // 2. Update state reflecting confirmed MongoDB update
+      const finalStatus =
+        status === 'Approved' || status === 'Adjusted'
+          ? 'Approved'
+          : status === 'Information Requested'
+          ? 'Under Review'
+          : 'Attention Required';
+
+      setClaims(prev =>
+        prev.map(c => {
+          if (c.id !== claimId) return c;
+          return {
+            ...c,
+            status: finalStatus as Claim['status'],
+            adjusterDecision: result.decision
+          };
+        })
+      );
+    }
   };
 
-  const addNewAssessment = (newAsm: Assessment, newPet: Pet) => {
-    // 1. Local State Update
-    setAssessments(prev => [newAsm, ...prev]);
-    setPets(prev => [newPet, ...prev]);
-    
-    // 2. Dispatch to Backend Services
-    petService.createPet(newPet).catch(console.warn);
-    assessmentService.createAssessment(newAsm).catch(console.warn);
+  const addNewAssessment = async (newAsm: Assessment, newPet: Pet) => {
+    // 1. Dispatch directly to live Backend Services (persists in MongoDB Atlas)
+    const savedPet = await petService.createPet(newPet);
+    const savedAsm = await assessmentService.createAssessment(newAsm);
 
-    setNotifications(prev => [
-      {
-        id: `notif-${Date.now()}`,
-        title: `New Risk Assessment run for ${newPet.name}`,
-        description: `Automated Rule Engine (${newAsm.ruleScore}) and ML Model (${newAsm.mlScore}) generated risk score ${newAsm.combinedScore}.`,
-        timestamp: 'Just now',
-        read: false,
-        priority: 'high',
-        link: `/assessments/${newAsm.id}`,
-        type: 'assessment'
-      },
-      ...prev
-    ]);
+    // 2. Add confirmed persisted records to frontend state
+    setAssessments(prev => [savedAsm || newAsm, ...prev]);
+    setPets(prev => [savedPet || newPet, ...prev]);
+
+    const notifItem: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: `New Risk Assessment run for ${newPet.name}`,
+      description: `Automated Rule Engine (${newAsm.ruleScore}) and ML Model (${newAsm.mlScore}) generated risk score ${newAsm.combinedScore}.`,
+      timestamp: 'Just now',
+      read: false,
+      priority: 'high',
+      link: `/assessments/${newAsm.id}`,
+      type: 'assessment'
+    };
+    setNotifications(prev => [notifItem, ...prev]);
+    operationsService.createNotification(notifItem).catch(console.warn);
   };
 
-  const markNotificationAsRead = (id: string) => {
+  const markNotificationAsRead = async (id: string) => {
     setNotifications(prev =>
       prev.map(n => (n.id === id ? { ...n, read: true } : n))
     );
+    operationsService.markNotificationRead(id).catch(console.warn);
   };
 
   const markAllNotificationsAsRead = () => {
@@ -338,6 +334,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notifications,
         unreadNotificationCount,
         isLoadingBackend,
+        backendError,
+        currentUser,
+        logoutUser,
         isSearchOpen,
         setIsSearchOpen,
         isNotificationsOpen,

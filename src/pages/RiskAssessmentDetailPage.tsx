@@ -11,9 +11,24 @@ export const RiskAssessmentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { assessments, pets, openRequestInfoModal } = useApp();
 
-  // Find assessment by id or fallback to Max (asm-1)
-  const assessment = assessments.find(a => a.id === id) || assessments[0];
-  const pet = pets.find(p => p.id === assessment.petId) || pets[0];
+  // Find assessment by id
+  const assessment = assessments.find(a => a.id === id) || (assessments.length > 0 ? assessments[0] : null);
+  const pet = assessment ? pets.find(p => p.id === assessment.petId) || (pets.length > 0 ? pets[0] : null) : null;
+
+  if (!assessment) {
+    return (
+      <div className="pt-28 pb-16 max-w-4xl mx-auto px-4 text-center space-y-4">
+        <h2 className="text-xl font-bold text-white">Assessment Dossier Not Found</h2>
+        <p className="text-xs text-petText-muted">The requested underwriting dossier is not in the database or has not loaded.</p>
+        <Link
+          to="/assessments"
+          className="inline-block px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white transition-colors"
+        >
+          Back to Assessments Registry
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-24 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -54,24 +69,26 @@ export const RiskAssessmentDetailPage: React.FC = () => {
             <div className="flex items-center gap-3 text-xs text-petText-muted pt-1">
               <span className="flex items-center gap-1">
                 <User size={12} />
-                <span>Owner: {pet.ownerName}</span>
+                <span>Owner: {pet?.ownerName || 'Verified Policyholder'}</span>
               </span>
               <span>·</span>
-              <span className="truncate max-w-[240px]">{pet.registeredVetClinic}</span>
+              <span className="truncate max-w-[240px]">{pet?.registeredVetClinic || 'Registered Vet Hub'}</span>
             </div>
           </div>
         </div>
 
         {/* View Full Pet Dossier CTA */}
-        <div className="flex items-center gap-2 self-start md:self-auto">
-          <Link
-            to={`/pets/${pet.id}`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white transition-colors"
-          >
-            <span>View Complete Pet Dossier</span>
-            <ExternalLink size={13} className="text-brand-teal" />
-          </Link>
-        </div>
+        {pet && (
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <Link
+              to={`/pets/${pet.id}`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white transition-colors"
+            >
+              <span>View Complete Pet Dossier</span>
+              <ExternalLink size={13} className="text-brand-teal" />
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Prominent But Elegant Risk Summary Component */}

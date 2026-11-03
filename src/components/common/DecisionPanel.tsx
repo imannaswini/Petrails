@@ -9,7 +9,7 @@ interface DecisionPanelProps {
 }
 
 export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
-  const { recordUnderwriterDecision, openRequestInfoModal } = useApp();
+  const { recordUnderwriterDecision, openRequestInfoModal, currentUser } = useApp();
   const [selectedAction, setSelectedAction] = useState<'Approve' | 'Request Information' | 'Refer for Review' | null>(
     assessment.underwriterDecision?.selectedDecision || null
   );
@@ -17,18 +17,23 @@ export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
   const [stipulation, setStipulation] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmitDecision = (e: React.FormEvent) => {
+  const handleSubmitDecision = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAction) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      recordUnderwriterDecision(assessment.id, selectedAction, notes, stipulation);
+    setErrorMessage(null);
+    try {
+      await recordUnderwriterDecision(assessment.id, selectedAction, notes, stipulation);
       setIsSubmitting(false);
       setShowSuccessToast(true);
       setTimeout(() => setShowSuccessToast(false), 4000);
-    }, 400);
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setErrorMessage(err?.message || 'Failed to record decision on server.');
+    }
   };
 
   const handleRequestInfoAction = () => {
@@ -159,11 +164,22 @@ export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
           />
         </div>
 
+        {errorMessage && (
+          <div className="p-3 rounded-lg bg-rose-950/50 border border-rose-800/50 text-rose-300 text-xs">
+            {errorMessage}
+          </div>
+        )}
+
         {/* Sign & Record Decision Button */}
         <div className="flex items-center justify-between pt-2">
           <div className="text-[11px] text-petText-dim flex items-center gap-1.5">
             <ShieldAlert size={12} className="text-brand-teal" />
-            <span>Authenticated as <strong>Sarah Jenkins (Senior Underwriting Officer)</strong></span>
+            <span>
+              Authenticated as{' '}
+              <strong>
+                {currentUser?.fullName || 'Sarah Jenkins'} ({currentUser?.role || 'Senior Underwriting Officer'})
+              </strong>
+            </span>
           </div>
 
           <button

@@ -3,7 +3,7 @@ import { User, Shield, Award, Clock, FileCheck, CheckCircle2 } from 'lucide-reac
 import { useApp } from '../context/AppContext';
 
 export const ProfilePage: React.FC = () => {
-  const { assessments } = useApp();
+  const { assessments, currentUser } = useApp();
 
   const auditDecisions = assessments.flatMap(a =>
     (a.decisionHistory || []).map(dh => ({
@@ -14,34 +14,40 @@ export const ProfilePage: React.FC = () => {
     }))
   );
 
+  const fullName = currentUser?.fullName || 'Sarah Jenkins';
+  const roleName = currentUser?.role || 'Senior Underwriter (Level 4)';
+  const orgName = currentUser?.organization || 'Tata AIG General Insurance';
+  const authorityLimit = currentUser?.authorityLimitInr || 500000;
+  const initials = fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
   return (
     <div className="pt-24 pb-20 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Profile Header */}
       <div className="p-6 sm:p-8 rounded-2xl bg-surface border border-surface-border shadow-cinematic flex flex-col sm:flex-row items-center gap-6">
         <div className="w-24 h-24 rounded-full bg-brand-spruce text-brand-ivory flex items-center justify-center text-3xl font-bold font-mono border-2 border-brand-teal shadow-elevated">
-          SJ
+          {initials}
         </div>
 
         <div className="text-center sm:text-left space-y-1.5 flex-1">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Sarah Jenkins
+              {fullName}
             </h1>
             <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-teal-950/60 text-brand-teal border border-teal-800/40 self-center sm:self-auto">
-              Senior Underwriter (Level 4)
+              {roleName}
             </span>
           </div>
 
           <p className="text-xs sm:text-sm text-petText-secondary">
-            Pet &amp; Veterinary Specialty Risk Division · Chartered Property Casualty Underwriter (CPCU)
+            {orgName} · Pet &amp; Veterinary Specialty Risk Division
           </p>
 
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs font-mono text-petText-muted pt-2">
-            <span>ID: UW-IN-88912</span>
+            <span>ID: {currentUser?.id || 'UW-IN-88912'}</span>
             <span>·</span>
             <span>Guidewire PolicyCenter Certified</span>
             <span>·</span>
-            <span>Bengaluru Hub</span>
+            <span>{currentUser?.email || 'bengaluru-hub@petrails.insure'}</span>
           </div>
         </div>
       </div>
@@ -55,7 +61,7 @@ export const ProfilePage: React.FC = () => {
               Binding Authority Limit
             </span>
           </div>
-          <p className="text-2xl font-bold font-mono text-white">₹5,00,000</p>
+          <p className="text-2xl font-bold font-mono text-white">₹{authorityLimit.toLocaleString('en-IN')}</p>
           <span className="text-[11px] text-petText-muted block">
             Per incident animal claim &amp; policy underwriting discretion limit
           </span>

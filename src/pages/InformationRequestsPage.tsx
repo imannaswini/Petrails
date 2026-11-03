@@ -9,7 +9,7 @@ export const InformationRequestsPage: React.FC = () => {
 
   // Gather all gaps across all assessments
   const allGaps = assessments.flatMap(asm =>
-    asm.informationGaps.map(gap => ({
+    (asm.informationGaps || []).map(gap => ({
       ...gap,
       assessmentId: asm.id,
       petName: asm.petName,
@@ -69,8 +69,15 @@ export const InformationRequestsPage: React.FC = () => {
       </div>
 
       {/* Inquiries List */}
-      <div className="space-y-4">
-        {filtered.map(gap => (
+      {filtered.length === 0 ? (
+        <div className="p-12 text-center rounded-xl bg-surface border border-surface-border space-y-2">
+          <CheckCircle2 size={32} className="mx-auto text-emerald-400 opacity-60 mb-2" />
+          <p className="text-sm font-semibold text-white">No outstanding clinical information inquiries</p>
+          <p className="text-xs text-petText-muted">All veterinary documents and questions have been resolved or none are pending.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filtered.map(gap => (
           <div
             key={gap.id}
             className="p-5 rounded-xl bg-surface border border-surface-border hover:border-surface-borderLight transition-all space-y-4 shadow-subtle"
@@ -165,7 +172,8 @@ export const InformationRequestsPage: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

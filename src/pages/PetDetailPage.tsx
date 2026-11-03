@@ -23,9 +23,24 @@ export const PetDetailPage: React.FC = () => {
     'timeline' | 'medical' | 'vaccines' | 'medications' | 'surgeries' | 'policies' | 'claims'
   >('timeline');
 
-  const pet = pets.find(p => p.id === id) || pets[0];
-  const assessment = assessments.find(a => a.petId === pet.id) || assessments[0];
-  const petClaims = claims.filter(c => c.petId === pet.id);
+  const pet = pets.find(p => p.id === id) || (pets.length > 0 ? pets[0] : null);
+  const assessment = pet ? assessments.find(a => a.petId === pet.id) || null : null;
+  const petClaims = pet ? claims.filter(c => c.petId === pet.id) : [];
+
+  if (!pet) {
+    return (
+      <div className="pt-28 pb-16 max-w-4xl mx-auto px-4 text-center space-y-4">
+        <h2 className="text-xl font-bold text-white">Animal Dossier Not Found</h2>
+        <p className="text-xs text-petText-muted">The requested pet record is not in the database.</p>
+        <Link
+          to="/pets"
+          className="inline-block px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white transition-colors"
+        >
+          Back to Pets Library
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-20 pb-20">
@@ -88,15 +103,17 @@ export const PetDetailPage: React.FC = () => {
             </div>
 
             {/* Quick Actions Right */}
-            <div className="flex items-center gap-3">
-              <Link
-                to={`/assessments/${assessment.id}`}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-teal hover:bg-teal-400 text-background font-bold text-xs tracking-wide transition-colors shadow-sm"
-              >
-                <Shield size={15} />
-                <span>Underwriting Assessment</span>
-              </Link>
-            </div>
+            {assessment && (
+              <div className="flex items-center gap-3">
+                <Link
+                  to={`/assessments/${assessment.id}`}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-teal hover:bg-teal-400 text-background font-bold text-xs tracking-wide transition-colors shadow-sm"
+                >
+                  <Shield size={15} />
+                  <span>Underwriting Assessment</span>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -128,8 +145,14 @@ export const PetDetailPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-surface border border-surface-border space-y-1">
             <span className="text-[11px] font-mono uppercase text-petText-muted block">Active Insurance Underwriting</span>
             <p className="font-bold text-white text-sm">Status: {pet.policyStatus}</p>
-            <p className="text-brand-teal font-mono pt-1">Rule Score: {assessment.ruleScore} | ML Score: {assessment.mlScore}</p>
-            <p className="text-petText-dim">Confidence Band: {assessment.calibrationBand}</p>
+            {assessment ? (
+              <>
+                <p className="text-brand-teal font-mono pt-1">Rule Score: {assessment.ruleScore} | ML Score: {assessment.mlScore}</p>
+                <p className="text-petText-dim">Confidence Band: {assessment.calibrationBand}</p>
+              </>
+            ) : (
+              <p className="text-petText-dim pt-1">Assessment pending generation</p>
+            )}
           </div>
         </div>
 

@@ -8,29 +8,50 @@ export const ClaimDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { claims, recordClaimDecision, openEvidenceModal } = useApp();
 
-  const claim = claims.find(c => c.id === id) || claims[0];
+  const claim = claims.find(c => c.id === id) || (claims.length > 0 ? claims[0] : null);
 
-  const [decisionNotes, setDecisionNotes] = useState(claim.adjusterDecision?.notes || '');
+  const [decisionNotes, setDecisionNotes] = useState(claim?.adjusterDecision?.notes || '');
   const [selectedAction, setSelectedAction] = useState<
     'Approved' | 'Adjusted' | 'Information Requested' | 'Referred to Senior Adjuster'
-  >(claim.adjusterDecision?.status || 'Approved');
+  >(claim?.adjusterDecision?.status || 'Approved');
   const [approvedAmount, setApprovedAmount] = useState<string>(
-    claim.adjusterDecision?.approvedAmountInr
+    claim?.adjusterDecision?.approvedAmountInr
       ? claim.adjusterDecision.approvedAmountInr.toString()
-      : (claim.amountInr * 0.9).toString()
+      : (claim ? (claim.amountInr * 0.9).toString() : '0')
   );
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const handleCommitDecision = (e: React.FormEvent) => {
-    e.preventDefault();
-    recordClaimDecision(
-      claim.id,
-      selectedAction,
-      decisionNotes,
-      parseInt(approvedAmount) || undefined
+  if (!claim) {
+    return (
+      <div className="pt-28 pb-16 max-w-4xl mx-auto px-4 text-center space-y-4">
+        <h2 className="text-xl font-bold text-white">Claim Record Not Found</h2>
+        <p className="text-xs text-petText-muted">The requested claim is not in the database.</p>
+        <Link
+          to="/claims"
+          className="inline-block px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white transition-colors"
+        >
+          Back to Claims Intelligence
+        </Link>
+      </div>
     );
-    setShowSavedToast(true);
-    setTimeout(() => setShowSavedToast(false), 4000);
+  }
+
+  const handleCommitDecision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionError(null);
+    try {
+      await recordClaimDecision(
+        claim.id,
+        selectedAction,
+        decisionNotes,
+        parseInt(approvedAmount) || undefined
+      );
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 4000);
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to record claim decision.');
+    }
   };
 
   const getIndicatorBadge = (status: string) => {

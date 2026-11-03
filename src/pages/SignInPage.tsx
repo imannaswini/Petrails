@@ -1,36 +1,51 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, ArrowRight, Lock, Mail, Eye, EyeOff, CheckCircle2, UserCheck } from 'lucide-react';
+import { Shield, ArrowRight, Lock, Mail, Eye, EyeOff, CheckCircle2, UserCheck, AlertTriangle } from 'lucide-react';
 import { PET_IMAGES } from '../data/mockData';
+import { authService } from '../services/authService';
+import { useApp } from '../context/AppContext';
 
 export const SignInPage: React.FC = () => {
   const navigate = useNavigate();
+  const { refreshData } = useApp();
   const [email, setEmail] = useState('sarah.jenkins@petrails.insure');
-  const [password, setPassword] = useState('••••••••••••');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setErrorMessage(null);
+    try {
+      await authService.login({ email, password });
+      await refreshData();
       navigate('/dashboard');
-    }, 600);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Invalid email or password.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleQuickDemoLogin = (role: 'underwriter' | 'claims') => {
+  const handleQuickDemoLogin = async (role: 'underwriter' | 'claims') => {
     setIsLoading(true);
-    if (role === 'underwriter') {
-      setEmail('sarah.jenkins@petrails.insure');
-    } else {
-      setEmail('rajesh.gupta@petrails.insure');
-    }
-    setTimeout(() => {
-      setIsLoading(false);
+    setErrorMessage(null);
+    const targetEmail = role === 'underwriter' 
+      ? 'sarah.jenkins@petrails.insure' 
+      : 'rajesh.gupta@petrails.insure';
+    setEmail(targetEmail);
+    try {
+      await authService.login({ email: targetEmail, password: 'Petrails@2026' });
+      await refreshData();
       navigate('/dashboard');
-    }, 400);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Demo user authentication failed.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -118,6 +133,13 @@ export const SignInPage: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle size={15} className="shrink-0 text-rose-400" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">

@@ -1,240 +1,263 @@
-# PETRAILS — Intelligent Pet Insurance Risk & Claims Intelligence Platform
+# PETRAILS — AI-Assisted Pet Insurance Risk & Claims Intelligence Platform
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-6.1.0-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Vite](https://img.shields.io/badge/Vite-6.4.5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![MongoDB Atlas](https://img.shields.io/badge/MongoDB-Atlas_Cloud-47A248?logo=mongodb&logoColor=white)](https://cloud.mongodb.com/)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.7.2-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
+[![SHAP](https://img.shields.io/badge/SHAP-0.54.1-red)](https://shap.readthedocs.io/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
-> **PETRAILS** is an enterprise-grade AI-assisted pet insurance risk assessment and claims intelligence platform built for insurance underwriters, claims adjusters, brokers, risk analysts, and veterinary actuaries.
+> **PETRAILS** is an enterprise-grade, full-stack actuarial intelligence platform built for pet insurance underwriters, claims adjusters, and veterinary medical officers. It couples deterministic actuarial insurance guidelines with trained machine learning models, explainable AI (SHAP), and live cloud database persistence via MongoDB Atlas.
 
 ---
 
-## 🌟 Executive Overview
+## 🌟 Key Capabilities
 
-PETRAILS combines **cinematic Netflix-style card-based browsing**, **Apple-level typographic precision**, and **enterprise-grade insurance density** into a unified intelligence workstation.
+1. **Transparent Dual-Engine Underwriting:**
+   - **Deterministic Rule Engine:** Encodes Guidewire-compliant baseline underwriting guidelines based on species, breed susceptibility (e.g. brachycephalic airway syndrome, large-breed hip dysplasia), life-stage age transitions, and declared clinical history.
+   - **Predictive ML Risk Model:** A trained `RandomForestRegressor` operating on independent clinical feature vectors to forecast loss severity and claim risk index (10–95).
+   - **Explainable AI (SHAP):** Fitted `shap.TreeExplainer` calculating exact Shapley delta attributions ($\sum \phi_i + \text{Base} = \text{Prediction}$) to show underwriters *why* an assessment received its score.
 
-Unlike generic chatbot wrappers, PETRAILS provides:
-- **Transparent Dual-Engine Scoring**: Actuarial Rule-based evaluation alongside calibrated Predictive ML Risk Scoring.
-- **Explainable AI (SHAP)**: Granular risk driver factor attribution with positive and negative score impacts.
-- **Clinical Information Gap Resolution**: Automated clinic questionnaire generation and follow-up tracking for ambiguous medical histories.
-- **Claims Anomaly Detection**: Forensic discrepancy detection between veterinary treatment diagnoses and itemized invoices.
-- **Audit-Compliant Decision Ledger**: Strict human-in-the-loop sign-off with permanent underwriter accountability.
+2. **Claims Intelligence & Anomaly Detection:**
+   - **Regional Tariff Benchmark Engine:** Compares itemized veterinary invoices against regional market fee bound tables (`standardMarketRangeInr`).
+   - **IsolationForest Anomaly Detector:** Identifies statistical outliers in billed-to-benchmark ratios, item counts, and episodic claim cadence.
+   - **Non-Accusatory Human-in-the-Loop Protocol:** Flags statistical variance for adjuster review rather than presuming fraud or automating claim denial.
+
+3. **Live Cloud Persistence (MongoDB Atlas):**
+   - Full asynchronous database integration via PyMongo Async (`petrails_db`).
+   - Persists 7 core collections: `users`, `pets`, `assessments`, `claims`, `notifications`, `information_requests`, and `audit_logs`.
+   - Complete audit trail logging every underwriter approval, stipulation, and claims settlement payout.
+
+4. **Clinical Information Gap Resolution:**
+   - Detects ambiguous veterinary records (e.g. unconfirmed joint laxity, vaccination gaps).
+   - Dispatches structured clinical inquiries directly to treating veterinary clinics.
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture Overview
 
 ```
-                                  ┌────────────────────────┐
-                                  │      Web Browser       │
-                                  │   (React 18 + Vite)    │
-                                  └───────────┬────────────┘
-                                              │
-                         HTTP / JSON          │   Proxy: /api
-                    ┌─────────────────────────┴─────────────────────────┐
-                    ▼                                                   ▼
-       ┌────────────────────────┐                          ┌────────────────────────┐
-       │   PETRAILS Frontend    │                          │    FastAPI Backend     │
-       │  (Vite Dev Server)     │                          │  (Actuarial API)       │
-       │  Port: 5173            │                          │  Port: 8000            │
-       └────────────────────────┘                          └───────────┬────────────┘
-                                                                       │
-                                            ┌──────────────────────────┴──────────────────────────┐
-                                            ▼                                                     ▼
-                                 ┌───────────────────────┐                             ┌───────────────────────┐
-                                 │ Actuarial Rule Engine │                             │ Predictive ML Engine  │
-                                 │ (Deterministic Rules) │                             │ (SHAP Factor Scoring) │
-                                 └───────────────────────┘                             └───────────────────────┘
+                          ┌────────────────────────┐
+                          │   React 18 + Vite UI   │
+                          │ (Tailwind CSS, Lucide) │
+                          │     Port: 5173         │
+                          └───────────┬────────────┘
+                                      │ HTTP REST (Proxy: /api)
+                                      ▼
+                          ┌────────────────────────┐
+                          │  FastAPI Backend Core  │
+                          │     (Python 3.13)      │
+                          │     Port: 8000         │
+                          └─────┬────────────┬─────┘
+                                │            │
+            ┌───────────────────┘            └───────────────────┐
+            ▼                                                    ▼
+┌───────────────────────────────┐                ┌───────────────────────────────┐
+│     Actuarial Intelligence    │                │      MongoDB Atlas Cloud      │
+│  - Actuarial Rule Engine      │                │  (PyMongo Async Connection)   │
+│  - RandomForest Risk Model    │                │  - Users & Roles (JWT Auth)   │
+│  - SHAP TreeExplainer (XAI)   │                │  - Pets & Clinical Records    │
+│  - IsolationForest Anomaly    │                │  - Assessments & Claims       │
+│  - Safe Age Regex Normalizer  │                │  - Audit Logs & Gaps          │
+└───────────────────────────────┘                └───────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Key Feature Modules
-
-### 1. Pre-Dashboard Suite
-- **Cinematic Landing Page (`/`)**: Enterprise value proposition, live platform metrics ticker, interactive risk simulation card, interactive workflow walkthrough, and institutional testimonials.
-- **Underwriter Authentication (`/sign-in`, `/sign-up`, `/forgot-password`)**: Institutional SSO, MFA verification badges, and authority tier selection.
-- **Profile & Settings (`/profile`, `/settings`)**: Underwriter authority tier limit management (e.g., ₹5,00,000 threshold), notification preferences, API integrations, and audit logs.
-
-### 2. Underwriter Dashboard (`/dashboard`)
-- **Cinematic Hero**: Viewport-optimized hero (55–65vh) with prominent clinical photography, high-contrast typography, and quick underwriter actions.
-- **"Continue Working" Shelf**: Horizontal scrolling cards with progress rings, priority badges, and quick-resume buttons.
-- **Portfolio Intelligence Shelf**: Visual risk breakdown across active policies with live threshold filters.
-- **Claims Intelligence**: Immediate visibility into pending claims, fraud flags, and high-frequency incident alerts.
-
-### 3. Risk Underwriting & Explainability (`/assessments`, `/assessments/:id`)
-- **Dual-Engine Calibration**: Direct comparison between deterministic actuarial rules and machine learning predictions.
-- **SHAP Contributing Factors**: Visual impact bars showing exact point contributions for age, breed vulnerabilities, geographic hazards, and pre-existing conditions.
-- **Explainability Modal**: Deep-dive statistical calibration band, confidence intervals, and decision tree traces.
-- **Human Decision Ledger**: Underwriters can approve, add stipulations, refer to a supervisor, or request additional clinical information with notes recorded into the audit trail.
-
-### 4. Information Gap Requests (`/info-requests`)
-- Identifies missing clinical records (e.g., unconfirmed radiologic diagnosis of joint stability).
-- Generates structured clinical questionnaires directly dispatchable to registered veterinary hospitals.
-
-### 5. Claims Intelligence (`/claims`, `/claims/:id`)
-- Forensic invoice itemization vs. clinical notes review.
-- Automated flag detection (e.g., pre-existing condition exclusions, uncustomary fee variances).
-- Adjudication action controls with instant claim approval or audit referral.
-
-### 6. Portfolio Analytics (`/analytics`)
-- Loss ratio trajectory charts, claims volume trends, and risk distribution histograms across species and breeds.
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technologies |
-|---|---|
-| **Frontend Framework** | React 18, TypeScript 5.7, Vite 6 |
-| **Routing** | React Router DOM v6 |
-| **Styling & Design System** | TailwindCSS 3.4, Vanilla CSS Custom Properties, Glassmorphism, Google Fonts (`Inter`, `Cinzel`) |
-| **Icons & Media** | Lucide React, Unsplash Veterinary Photography |
-| **Backend API** | Python 3.13, FastAPI 0.110+, Uvicorn, Pydantic v2 |
-| **Data & Analytics** | NumPy, Pandas, Scikit-Learn, XGBoost, SHAP |
-
----
-
-## 📋 Repository Structure
+## 📁 Repository Structure
 
 ```
 Petrails/
-├── .env.example             # Frontend environment variables template
-├── .gitignore               # Multi-platform production gitignore
-├── index.html               # Main HTML entrypoint with typography preloads
-├── package.json             # NPM scripts and frontend dependencies
-├── tsconfig.json            # TypeScript configuration
-├── vite.config.ts           # Vite server configuration with API proxy
+├── index.html                   # HTML entrypoint with Cinzel & Inter typography preloads
+├── package.json                 # Node dependencies & frontend scripts
+├── tsconfig.json                # TypeScript compiler configuration
+├── vite.config.ts               # Vite bundler configuration & backend API proxy
+├── .gitignore                   # Multi-platform production gitignore (protects secrets)
 │
-├── backend/                 # Python FastAPI Backend
-│   ├── main.py              # Actuarial API endpoints & dual scoring engine
-│   ├── requirements.txt     # Python backend dependencies
-│   ├── run.bat              # Windows batch launch script (Port 8000)
-│   └── run.ps1              # PowerShell launch script (Port 8000)
+├── backend/                     # Python FastAPI Backend Architecture
+│   ├── .env.example             # Template for MongoDB URI and JWT secrets
+│   ├── main.py                  # Backend root forwarder (app.main:app)
+│   ├── requirements.txt         # Pinned Python package dependencies
+│   ├── run.bat                  # One-click Windows CMD launch script
+│   ├── run.ps1                  # One-click Windows PowerShell launch script
+│   │
+│   └── app/                     # Modular Application Package
+│       ├── main.py              # FastAPI application factory, lifespan, CORS
+│       ├── core/
+│       │   ├── config.py        # Pydantic Settings management (.env loading)
+│       │   ├── database.py      # Async MongoClient connection, ping, & indexes
+│       │   └── security.py      # Bcrypt password hashing, JWT creation & RBAC
+│       ├── api/                 # REST Route Controllers
+│       │   ├── routes_auth.py   # Registration, Login, and Profile endpoints
+│       │   ├── routes_health.py # Health checks & MongoDB ping diagnostics
+│       │   ├── routes_pets.py   # Pet dossier CRUD operations
+│       │   ├── routes_assessments.py # Underwriting assessments & decisions
+│       │   ├── routes_claims.py # Claims intake, anomaly detection & review
+│       │   ├── routes_operations.py # Information gaps & notification endpoints
+│       │   └── routes_analytics.py  # Portfolio loss ratios & risk aggregation
+│       ├── schemas/             # Pydantic Request & Response Data Models
+│       │   ├── auth.py, health.py, pet.py, assessment.py, claim.py, analytics.py
+│       ├── services/            # Business & Actuarial Intelligence Logic
+│       │   ├── audit_service.py # Immutable MongoDB audit trail logger
+│       │   └── intelligence_service.py # Dual-Engine coordinator
+│       ├── ml/                  # Machine Learning & Explainable AI Module
+│       │   ├── train_models.py  # Dataset generator & scikit-learn training pipeline
+│       │   ├── inference.py     # Real-time model inference & SHAP calculation
+│       │   ├── data/            # Exported actuarial training data & README
+│       │   │   ├── pet_underwriting_actuarial_v1.csv
+│       │   │   └── README.md
+│       │   └── models/          # Serialized scikit-learn & SHAP model artifacts
+│       │       ├── underwriting_risk_model.joblib
+│       │       └── claims_anomaly_model.joblib
+│       └── tests/               # Automated Pytest Test Suite (35 tests)
+│           ├── test_ml_pipeline.py, test_auth.py, test_pets.py, ...
 │
-└── src/                     # React Frontend Application
-    ├── App.tsx              # Application layout & navigation
-    ├── index.css            # Global CSS design tokens & animations
-    ├── main.tsx             # React DOM root entrypoint
-    ├── vite-env.d.ts        # Vite client type definitions
-    │
+└── src/                         # React 18 Frontend Application
+    ├── App.tsx                  # Root application router & layout wrapper
+    ├── main.tsx                 # DOM mounting point
+    ├── index.css                # Tailwind directives & CSS design tokens
+    ├── context/
+    │   └── AppContext.tsx       # Live application state & backend synchronization
     ├── components/
-    │   ├── common/          # AssessmentCard, InformationGap, Modal, MetricCard
-    │   ├── navigation/      # Cinematic TopBar, UserMenu, NotificationTray
-    │   └── ui/              # Button, Badge, StatusPill, Input components
-    │
-    ├── pages/               # 13 Application Pages
-    │   ├── LandingPage.tsx          # Public-facing cinematic showcase
-    │   ├── SignInPage.tsx           # Institutional authentication
-    │   ├── SignUpPage.tsx           # Underwriter registration
-    │   ├── ForgotPasswordPage.tsx   # Password recovery flow
-    │   ├── ProfilePage.tsx          # Underwriter credentials & credentials
-    │   ├── SettingsPage.tsx         # Actuarial rules & notification settings
-    │   ├── DashboardPage.tsx        # Underwriter mission control
-    │   ├── AssessmentsPage.tsx      # Policy risk intake queue
-    │   ├── AssessmentDetailPage.tsx # Deep-dive SHAP factors & decisioning
-    │   ├── NewAssessmentPage.tsx    # Policy application intake wizard
-    │   ├── PetProfilePage.tsx       # Longitudinal clinical pet history
-    │   ├── ClaimsPage.tsx           # Claims triage ledger
-    │   ├── ClaimDetailPage.tsx      # Forensic invoice & diagnosis adjudication
-    │   ├── InfoRequestsPage.tsx     # Clinic inquiry dispatch center
-    │   └── AnalyticsPage.tsx        # Actuarial portfolio loss trends
-    │
-    ├── services/            # API Client Layer with Mock Fallback
-    │   ├── apiClient.ts
-    │   ├── assessmentService.ts
-    │   ├── claimService.ts
-    │   ├── petService.ts
-    │   └── analyticsService.ts
-    │
-    ├── mock/                # Enterprise Clinical Datasets
-    │   ├── assessments.ts   # Synthetic risk evaluations
-    │   ├── claims.ts        # Itemized claims & invoices
-    │   └── pets.ts          # Complete longitudinal pet records
-    │
-    └── types/               # TypeScript Actuarial Interfaces
-        └── index.ts         # RiskLevel, Assessment, Claim, Pet, SHAP types
+    │   ├── common/              # AssessmentCard, ClaimCard, ExplainabilityPanel, ...
+    │   └── navigation/          # Navbar, NotificationCenter, SearchModal
+    ├── pages/                   # 13 Application Pages
+    │   ├── LandingPage.tsx      # Public platform overview & value proposition
+    │   ├── SignInPage.tsx       # Institutional authentication
+    │   ├── SignUpPage.tsx       # Underwriter onboarding
+    │   ├── DashboardPage.tsx    # Underwriter mission control
+    │   ├── AssessmentsPage.tsx  # Policy underwriting queue
+    │   ├── RiskAssessmentDetailPage.tsx # Deep-dive Dual-Engine & SHAP factor dossier
+    │   ├── NewAssessmentPage.tsx# Policy application intake wizard
+    │   ├── ClaimsPage.tsx       # Claims adjudication workspace (Table & Card views)
+    │   ├── ClaimDetailPage.tsx  # Forensic invoice & treatment adjudication
+    │   ├── PetDetailPage.tsx    # Longitudinal pet clinical history
+    │   ├── InformationRequestsPage.tsx # Clinical gap inquiry dispatch center
+    │   ├── AnalyticsPage.tsx    # Actuarial portfolio analytics & risk distributions
+    │   ├── ProfilePage.tsx      # Underwriter profile & authority limit
+    │   └── SettingsPage.tsx     # System settings & notification controls
+    ├── services/                # Axios/Fetch API client layer
+    │   ├── apiClient.ts, authService.ts, petService.ts, claimService.ts, ...
+    └── types/                   # TypeScript interfaces (Pet, Claim, Assessment, SHAP)
 ```
 
 ---
 
 ## ⚡ Quickstart Guide
 
-### Prerequisites
+### 1. Prerequisites
 - **Node.js**: v18.0.0 or higher
-- **Python**: 3.10+ (Anaconda or standard Python)
+- **Python**: 3.10+ (Anaconda or standard 64-bit Python)
+- **MongoDB Atlas**: Active cluster connection URI
 
 ---
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/imannaswini/Petrails.git
-cd Petrails
-```
+### 2. Backend Setup & Startup
 
-### 2. Frontend Setup
-Install frontend dependencies:
-```bash
-npm install
-```
+1. **Navigate to the backend folder:**
+   ```bash
+   cd backend
+   ```
 
-Start the Vite development server:
-```bash
-npm run dev
-```
-The application will launch at **[http://localhost:5173](http://localhost:5173)**.
+2. **Configure Environment Variables:**
+   Copy `.env.example` to `.env` and provide your MongoDB Atlas credentials:
+   ```bash
+   cp .env.example .env
+   ```
+   *Edit `.env`:*
+   ```ini
+   HOST=0.0.0.0
+   PORT=8000
+   MONGODB_URI=mongodb+srv://<username>:<password>@petrails.asxljqd.mongodb.net/?retryWrites=true&w=majority
+   MONGODB_DATABASE=petrails_db
+   JWT_SECRET_KEY=petrails-super-secret-key-change-in-production-2026
+   JWT_ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_MINUTES=1440
+   CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","*"]
+   ```
+
+3. **Install Dependencies into Virtual Environment:**
+   ```bash
+   python -m venv .venv
+   .\.venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+4. **Train and Export Machine Learning Models:**
+   ```bash
+   python -m app.ml.train_models
+   ```
+
+5. **Start the FastAPI Backend:**
+   - **In PowerShell:**
+     ```powershell
+     .\run.ps1
+     ```
+   - **In Command Prompt (CMD):**
+     ```cmd
+     run.bat
+     ```
+   - *Backend runs on **`http://127.0.0.1:8000`**.*
+   - *Interactive Swagger UI is available at **`http://127.0.0.1:8000/docs`**.*
 
 ---
 
-### 3. Backend Setup
-From the project root, you can start the FastAPI backend directly using:
+### 3. Frontend Setup & Startup
 
+1. **From the project root directory:**
+   ```bash
+   npm install
+   ```
+
+2. **Run the Vite Development Server:**
+   ```bash
+   npm run dev
+   ```
+   - *Application runs on **`http://localhost:5173/`**.*
+   - *Vite automatically proxies `/api` requests to `http://localhost:8000`.*
+
+---
+
+## 🧪 Testing and Verification
+
+### Backend Automated Pytest Suite
+Run the full test suite containing **35 passing tests**:
 ```bash
-# Option A: Via npm script
-npm run backend
-
-# Option B: Navigate to backend folder and run
 cd backend
-.\run.ps1       # On PowerShell
-# or
-.\run.bat       # On Windows Command Prompt
+python -m pytest
 ```
+*Coverage includes:*
+- `test_ml_pipeline.py`: AgeText regex normalizer, model loading, real inference, SHAP additivity reconciliation ($\Delta = 0.000000$), and claims IsolationForest.
+- `test_auth.py`: User registration, bcrypt password hashing (12 rounds), JWT issuance, and RBAC role checks.
+- `test_pets.py`: Pet dossier creation, listing, and ID lookups.
+- `test_assessments.py`: Dual-Engine risk scoring, SHAP factors, and decision audit recording.
+- `test_claims.py`: Claims intake, regional tariff deviation evaluation, and adjuster payout approvals.
+- `test_analytics.py`: MongoDB portfolio loss ratio aggregations and breed risk trends.
+- `test_health.py`: Live database ping and service heartbeat diagnostics.
 
-The backend API will run at **[http://localhost:8000](http://localhost:8000)**.
-Interactive Swagger documentation is available at **[http://localhost:8000/docs](http://localhost:8000/docs)**.
-
----
-
-## 🌐 API Route Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Service health status check |
-| `POST` | `/api/auth/login` | Underwriter authentication & JWT generation |
-| `POST` | `/api/auth/register` | Organization user intake |
-| `GET` | `/api/auth/me` | Current session underwriter credentials |
-| `GET` | `/api/assessments` | Fetch all underwriting risk assessments |
-| `GET` | `/api/assessments/{id}` | Single assessment with SHAP factor breakdown |
-| `POST` | `/api/assessments/{id}/decision` | Record underwriter approval, stipulation, or referral |
-| `POST` | `/api/assessments/{id}/information-request` | Dispatch clinical questionnaire to veterinary hospital |
-| `GET` | `/api/claims` | List submitted claims and adjudication status |
-| `GET` | `/api/claims/{id}` | Detailed forensic invoice & discrepancy breakdown |
-| `POST` | `/api/claims/{id}/decision` | Record claims adjudication payout |
-| `GET` | `/api/analytics/portfolio` | Loss ratio and portfolio risk distribution metrics |
+### Frontend Production Build
+```bash
+npm run build
+```
+*Compiles TypeScript without type errors (`tsc -b`) and generates production bundles in `dist/` via Vite.*
 
 ---
 
-## 🛡️ Resilience & Mock Fallback
+## 🔐 Default Credentials (Seed Underwriter)
 
-PETRAILS features a resilient frontend architecture:
-- If the backend is running, the frontend automatically proxies API requests through `/api` to `http://localhost:8000`.
-- If the backend is offline or disconnected, `VITE_USE_MOCK_FALLBACK=true` allows the application to continue functioning seamlessly with full interactive mock data, ensuring uninterrupted demonstrations and client reviews.
+When the backend boots against a fresh MongoDB Atlas instance, default seed underwriters auto-bootstrap on first login:
+
+- **Email:** `sarah.jenkins@petrails.insure`
+- **Password:** `Petrails@2026`
+- **Role:** Senior Underwriting Officer
+- **Authority Limit:** ₹5,00,000 (Tata AIG General Insurance)
 
 ---
 
-## 📄 License & Credits
+## 📄 Academic Research & Attribution
 
 Developed as part of the **Guidewire Pet Insurance Underwriting & Claims Intelligence Research Project** at **Reva University**.
 

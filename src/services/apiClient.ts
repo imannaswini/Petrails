@@ -1,8 +1,7 @@
 // PETRAILS API Client
-// Handles HTTP requests, JWT authorization headers, and error normalization
+// Handles HTTP requests, JWT authorization headers, error normalization, and session handling
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCK_FALLBACK = import.meta.env.VITE_USE_MOCK_FALLBACK !== 'false';
 
 export class ApiError extends Error {
   status: number;
@@ -18,8 +17,7 @@ export class ApiError extends Error {
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {},
-  fallbackData?: T
+  options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
   
@@ -34,79 +32,78 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
 
-    if (!response.ok) {
-      let errorData: any = null;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = await response.text();
-      }
-      throw new ApiError(
-        response.status,
-        errorData?.message || `Request failed with status ${response.status}`,
-        errorData
-      );
+  if (!response.ok) {
+    let errorData: any = null;
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = await response.text();
     }
 
-    // If 204 No Content
-    if (response.status === 204) {
-      return {} as T;
+    let errorMessage = `Request failed with status ${response.status}`;
+    if (typeof errorData?.detail === 'string') {
+      errorMessage = errorData.detail;
+    } else if (Array.isArray(errorData?.detail)) {
+      errorMessage = errorData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+    } else if (errorData?.message) {
+      errorMessage = errorData.message;
     }
 
-    return await response.json();
-  } catch (err: any) {
-    // If mock fallback is enabled and we have fallback data provided or network failed
-    if (USE_MOCK_FALLBACK && fallbackData !== undefined) {
-      console.warn(`[PETRAILS API] Network call to ${endpoint} failed. Using fallback data.`, err);
-      return fallbackData;
+    // Cleanly clear token on 401 Unauthorized to invalidate expired session
+    if (response.status === 401) {
+      localStorage.removeItem('petrails_auth_token');
     }
-    throw err;
+
+    throw new ApiError(response.status, errorMessage, errorData);
   }
+
+  // If 204 No Content
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return await response.json();
 }
 
 export const apiClient = {
-  get: <T>(endpoint: string, fallbackData?: T, options?: RequestInit) =>
-    request<T>(endpoint, { method: 'GET', ...options }, fallbackData),
+  get: <T>(endpoint: string, options?: RequestInit) =>
+    request<T>(endpoint, { method: 'GET', ...options }),
 
-  post: <T>(endpoint: string, body?: any, fallbackData?: T, options?: RequestInit) =>
+  post: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(
       endpoint,
       {
         method: 'POST',
         body: body ? JSON.stringify(body) : undefined,
         ...options,
-      },
-      fallbackData
+      }
     ),
 
-  put: <T>(endpoint: string, body?: any, fallbackData?: T, options?: RequestInit) =>
+  put: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(
       endpoint,
       {
         method: 'PUT',
         body: body ? JSON.stringify(body) : undefined,
         ...options,
-      },
-      fallbackData
+      }
     ),
 
-  patch: <T>(endpoint: string, body?: any, fallbackData?: T, options?: RequestInit) =>
+  patch: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(
       endpoint,
       {
         method: 'PATCH',
         body: body ? JSON.stringify(body) : undefined,
         ...options,
-      },
-      fallbackData
+      }
     ),
 
-  delete: <T>(endpoint: string, fallbackData?: T, options?: RequestInit) =>
-    request<T>(endpoint, { method: 'DELETE', ...options }, fallbackData),
+  delete: <T>(endpoint: string, options?: RequestInit) =>
+    request<T>(endpoint, { method: 'DELETE', ...options }),
 };

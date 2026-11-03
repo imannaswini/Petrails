@@ -79,7 +79,7 @@ export const NewAssessmentPage: React.FC = () => {
   const handleRunAssessment = () => {
     setIsProcessing(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const scores = calculateScores();
       const newPetId = `pet-${Date.now()}`;
       const newAsmId = `asm-${Date.now()}`;
@@ -220,9 +220,14 @@ export const NewAssessmentPage: React.FC = () => {
         imageUrl: newPet.imageUrl
       };
 
-      addNewAssessment(newAssessment, newPet);
-      setIsProcessing(false);
-      navigate(`/assessments/${newAsmId}`);
+      try {
+        await addNewAssessment(newAssessment, newPet);
+        setIsProcessing(false);
+        navigate(`/assessments/${newAsmId}`);
+      } catch (err: any) {
+        setIsProcessing(false);
+        alert(err?.message || 'Failed to save assessment to server. Your entered data is preserved.');
+      }
     }, 1200);
   };
 

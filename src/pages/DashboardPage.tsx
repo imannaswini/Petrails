@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { PET_IMAGES, MOCK_PORTFOLIO_METRICS } from '../data/mockData';
+import { PET_IMAGES } from '../data/mockData';
+import { analyticsService } from '../services/analyticsService';
+import { PortfolioMetrics } from '../types';
 import { PetCard } from '../components/common/PetCard';
 import { MetricCard } from '../components/common/MetricCard';
 import { RiskBadge } from '../components/common/RiskBadge';
@@ -23,108 +25,70 @@ export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [selectedRiskFilter, setSelectedRiskFilter] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
 
-  // Specific continue working list with exact requested custom status labels
-  const continueWorkingPets = [
-    { pet: pets.find(p => p.id === 'pet-1') || pets[0], statusLabel: 'MEDIUM RISK' },
-    { pet: pets.find(p => p.id === 'pet-2') || pets[1], statusLabel: 'CLAIM REVIEW' },
-    { pet: pets.find(p => p.id === 'pet-3') || pets[2], statusLabel: 'LOW RISK' },
-    { pet: pets.find(p => p.id === 'pet-5') || pets[4], statusLabel: 'REVIEW REQUIRED' },
-    { pet: pets.find(p => p.id === 'pet-4') || pets[3], statusLabel: 'ATTENTION REQUIRED' },
-  ];
+  const [portfolioMetrics, setPortfolioMetrics] = useState<PortfolioMetrics | null>(null);
 
-  // Specific Priority Assessments matching requirement #6
-  const priorityAssessmentsData = [
-    {
-      id: 'asm-1',
-      petName: 'MAX',
-      breed: 'Golden Retriever',
-      ageText: '6 years',
-      riskLevel: 'MEDIUM' as const,
-      riskLabel: 'MEDIUM RISK',
-      reason: 'Previous orthopedic treatment',
-      imageUrl: PET_IMAGES.max,
-      actionType: 'review' as const,
-      actionLabel: 'Review'
-    },
-    {
-      id: 'asm-2',
-      petName: 'LUNA',
-      breed: 'Persian Cat',
-      ageText: '4 years',
-      riskLevel: 'MEDIUM' as const,
-      riskLabel: 'INFORMATION REQUIRED',
-      reason: 'Medical history incomplete',
-      imageUrl: PET_IMAGES.luna,
-      actionType: 'request_info' as const,
-      actionLabel: 'Request information'
-    },
-    {
-      id: 'asm-4',
-      petName: 'MILO',
-      breed: 'Domestic Shorthair',
-      ageText: '3 years',
-      riskLevel: 'HIGH' as const,
-      riskLabel: 'HIGH RISK',
-      reason: 'Recurrent foreign body ingestion',
-      imageUrl: PET_IMAGES.milo,
-      actionType: 'review' as const,
-      actionLabel: 'Review'
-    },
-    {
-      id: 'asm-6',
-      petName: 'ROCKY',
-      breed: 'French Bulldog',
-      ageText: '5 years',
-      riskLevel: 'HIGH' as const,
-      riskLabel: 'HIGH RISK',
-      reason: 'Grade 3 BOAS corrective history',
-      imageUrl: PET_IMAGES.rocky,
-      actionType: 'review' as const,
-      actionLabel: 'Review'
-    }
-  ];
+  useEffect(() => {
+    analyticsService.getPortfolioMetrics()
+      .then(setPortfolioMetrics)
+      .catch(() => {});
+  }, [assessments.length, claims.length]);
 
-  // Specific Claims Requiring Attention matching requirement #7
-  const claimsRequiringAttention = [
-    {
-      id: 'cl-20831',
-      petName: 'MAX',
-      treatment: 'Orthopedic Surgery',
-      amountInr: 42000,
-      badgeText: 'Anomaly score 31%',
-      badgeType: 'anomaly' as const,
-      imageUrl: PET_IMAGES.max
-    },
-    {
-      id: 'cl-20832',
-      petName: 'LUNA',
-      treatment: 'Dental Treatment',
-      amountInr: 12500,
-      badgeText: 'Awaiting documents',
-      badgeType: 'warning' as const,
-      imageUrl: PET_IMAGES.luna
-    },
-    {
-      id: 'cl-20841',
-      petName: 'BRUNO',
-      treatment: 'Allergy Treatment',
-      amountInr: 8200,
-      badgeText: 'Coverage review',
-      badgeType: 'info' as const,
-      imageUrl: PET_IMAGES.bruno
-    },
-    {
-      id: 'cl-20835',
-      petName: 'ROCKY',
-      treatment: 'Soft Palate Resection',
-      amountInr: 65000,
-      badgeText: 'Invoice deviation (+25%)',
-      badgeType: 'alert' as const,
-      imageUrl: PET_IMAGES.rocky
-    }
-  ];
+  // Dynamic Continue Working list derived from real pets
+  const continueWorkingPets = pets.slice(0, 5).map(pet => {
+    const matchingAsm = assessments.find(a => a.petId === pet.id);
+    const statusLabel = pet.policyStatus === 'Active'
+      ? (matchingAsm ? `${matchingAsm.riskLevel} RISK` : 'ACTIVE POLICY')
+      : 'REVIEW REQUIRED';
+    return { pet, statusLabel };
+  });
 
-  const riskDistribution = MOCK_PORTFOLIO_METRICS.riskDistribution;
+  // Dynamic Priority Assessments derived from real assessments
+  const priorityAssessmentsData = assessments
+    .filter(a => a.status === 'Under Review' || a.status === 'Information Requested' || a.status === 'Attention Required' || a.riskLevel === 'HIGH' || a.riskLevel === 'MEDIUM')
+    .slice(0, 4)
+    .map(asm => ({
+      id: asm.id,
+      petName: asm.petName.toUpperCase(),
+      breed: asm.breed,
+      ageText: asm.ageText || 'Unknown age',
+      riskLevel: asm.riskLevel,
+      riskLabel: asm.status === 'Information Requested' ? 'INFORMATION REQUIRED' : `${asm.riskLevel} RISK`,
+      reason: asm.contributingFactors?.[0]?.name || asm.underwriterDecision?.underwriterNotes || 'Actuarial profile review',
+      imageUrl: asm.imageUrl || PET_IMAGES.max,
+      actionType: asm.status === 'Information Requested' ? 'request_info' as const : 'review' as const,
+      actionLabel: asm.status === 'Information Requested' ? 'Request information' : 'Review'
+    }));
+
+  // Dynamic Claims Requiring Attention derived from real claims
+  const claimsRequiringAttention = claims
+    .filter(c => c.status === 'Under Review' || c.status === 'Attention Required' || c.status === 'Flagged' || (c.anomalyScore && c.anomalyScore > 20))
+    .slice(0, 4)
+    .map(c => {
+      const bType: 'anomaly' | 'alert' | 'warning' | 'info' =
+        c.anomalyScore && c.anomalyScore > 30 ? 'anomaly' : c.status === 'Flagged' ? 'alert' : c.status === 'Under Review' ? 'warning' : 'info';
+
+      return {
+        id: c.id,
+        petName: c.petName.toUpperCase(),
+        treatment: c.treatment || 'Clinical Treatment',
+        amountInr: c.amountInr,
+        badgeText: c.indicators?.[0]?.name || (c.status === 'Under Review' ? 'Awaiting documents' : 'Coverage review'),
+        badgeType: bType,
+        imageUrl: c.imageUrl || PET_IMAGES.max
+      };
+    });
+
+  // Calculate live portfolio risk distribution
+  const totalAsm = assessments.length;
+  const lowCount = assessments.filter(a => a.riskLevel === 'LOW').length;
+  const medCount = assessments.filter(a => a.riskLevel === 'MEDIUM').length;
+  const highCount = assessments.filter(a => a.riskLevel === 'HIGH').length;
+
+  const riskDistribution = portfolioMetrics?.riskDistribution || {
+    low: totalAsm > 0 ? Math.round((lowCount / totalAsm) * 100) : 0,
+    medium: totalAsm > 0 ? Math.round((medCount / totalAsm) * 100) : 0,
+    high: totalAsm > 0 ? Math.round((highCount / totalAsm) * 100) : 0,
+  };
 
   const handleRiskBarClick = (level: 'LOW' | 'MEDIUM' | 'HIGH') => {
     setSelectedRiskFilter(selectedRiskFilter === level ? 'ALL' : level);
@@ -240,16 +204,22 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {/* Horizontal scroll container with Netflix pet cards */}
-          <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 hide-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0">
-            {continueWorkingPets.map(({ pet, statusLabel }) => (
-              <PetCard
-                key={pet.id}
-                pet={pet}
-                variant="netflix-horizontal"
-                customStatusLabel={statusLabel}
-              />
-            ))}
-          </div>
+          {continueWorkingPets.length === 0 ? (
+            <div className="p-8 rounded-xl bg-surface border border-surface-border text-center text-xs text-petText-muted">
+              No active animal dossiers in queue. Start by running a new risk assessment.
+            </div>
+          ) : (
+            <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 hide-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0">
+              {continueWorkingPets.map(({ pet, statusLabel }) => (
+                <PetCard
+                  key={pet.id}
+                  pet={pet}
+                  variant="netflix-horizontal"
+                  customStatusLabel={statusLabel}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 
@@ -276,72 +246,78 @@ export const DashboardPage: React.FC = () => {
             </Link>
           </div>
 
-          <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 hide-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0">
-            {priorityAssessmentsData.map(item => (
-              <div
-                key={item.id}
-                className="group shrink-0 w-[300px] sm:w-[330px] rounded-xl overflow-hidden bg-surface border border-surface-border/70 hover:border-surface-borderLight transition-all duration-300 hover:scale-[1.02] hover:shadow-cinematic flex flex-col justify-between"
-              >
-                <div>
-                  {/* Top Image Preview */}
-                  <div className="relative h-44 w-full bg-surface-higher overflow-hidden">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.petName}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-black/20" />
+          {priorityAssessmentsData.length === 0 ? (
+            <div className="p-8 rounded-xl bg-surface border border-surface-border text-center text-xs text-petText-muted">
+              No pending underwriting assessments requiring attention.
+            </div>
+          ) : (
+            <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 hide-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0">
+              {priorityAssessmentsData.map(item => (
+                <div
+                  key={item.id}
+                  className="group shrink-0 w-[300px] sm:w-[330px] rounded-xl overflow-hidden bg-surface border border-surface-border/70 hover:border-surface-borderLight transition-all duration-300 hover:scale-[1.02] hover:shadow-cinematic flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Top Image Preview */}
+                    <div className="relative h-44 w-full bg-surface-higher overflow-hidden">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.petName}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-black/20" />
 
-                    <div className="absolute top-3 right-3">
-                      <RiskBadge level={item.riskLevel} size="sm" />
+                      <div className="absolute top-3 right-3">
+                        <RiskBadge level={item.riskLevel} size="sm" />
+                      </div>
+
+                      <div className="absolute bottom-3 left-3 right-3">
+                        <h3 className="text-lg font-bold text-white tracking-tight">
+                          {item.petName}
+                        </h3>
+                        <p className="text-xs text-petText-secondary font-medium">
+                          {item.breed} · {item.ageText}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <h3 className="text-lg font-bold text-white tracking-tight">
-                        {item.petName}
-                      </h3>
-                      <p className="text-xs text-petText-secondary font-medium">
-                        {item.breed} · {item.ageText}
-                      </p>
+                    {/* Actuarial Reason Section */}
+                    <div className="p-4 space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-petText-muted block">
+                        Underwriting Trigger
+                      </span>
+                      <div className="p-2.5 rounded-lg bg-surface-elevated border border-surface-border/60 text-xs text-brand-ivory font-medium">
+                        "{item.reason}"
+                      </div>
                     </div>
                   </div>
 
-                  {/* Actuarial Reason Section */}
-                  <div className="p-4 space-y-2">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-petText-muted block">
-                      Underwriting Trigger
-                    </span>
-                    <div className="p-2.5 rounded-lg bg-surface-elevated border border-surface-border/60 text-xs text-brand-ivory font-medium">
-                      "{item.reason}"
-                    </div>
+                  {/* Action Button */}
+                  <div className="p-4 pt-0">
+                    {item.actionType === 'request_info' ? (
+                      <button
+                        type="button"
+                        onClick={() => openRequestInfoModal(item.id, item.petName, item.reason)}
+                        className="w-full py-2 px-3 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Send size={13} className="text-brand-teal" />
+                        <span>Request information</span>
+                      </button>
+                    ) : (
+                      <Link
+                        to={`/assessments/${item.id}`}
+                        className="w-full py-2 px-3 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors group-hover:border-brand-teal/60"
+                      >
+                        <span>Review</span>
+                        <ChevronRight size={13} className="text-brand-teal" />
+                      </Link>
+                    )}
                   </div>
                 </div>
-
-                {/* Action Button */}
-                <div className="p-4 pt-0">
-                  {item.actionType === 'request_info' ? (
-                    <button
-                      type="button"
-                      onClick={() => openRequestInfoModal(item.id, item.petName, item.reason)}
-                      className="w-full py-2 px-3 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <Send size={13} className="text-brand-teal" />
-                      <span>Request information</span>
-                    </button>
-                  ) : (
-                    <Link
-                      to={`/assessments/${item.id}`}
-                      className="w-full py-2 px-3 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors group-hover:border-brand-teal/60"
-                    >
-                      <span>Review</span>
-                      <ChevronRight size={13} className="text-brand-teal" />
-                    </Link>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 
@@ -367,76 +343,82 @@ export const DashboardPage: React.FC = () => {
             </Link>
           </div>
 
-          <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 hide-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0">
-            {claimsRequiringAttention.map(claimItem => (
-              <div
-                key={claimItem.id}
-                className="group shrink-0 w-[290px] sm:w-[320px] rounded-xl overflow-hidden bg-surface border border-surface-border/70 hover:border-surface-borderLight transition-all duration-300 hover:scale-[1.02] hover:shadow-cinematic flex flex-col justify-between"
-              >
-                <div>
-                  {/* Top Image Preview with Procedure Badge */}
-                  <div className="relative h-36 w-full bg-surface-higher overflow-hidden">
-                    <img
-                      src={claimItem.imageUrl}
-                      alt={claimItem.petName}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-black/30" />
+          {claimsRequiringAttention.length === 0 ? (
+            <div className="p-8 rounded-xl bg-surface border border-surface-border text-center text-xs text-petText-muted">
+              No active claims currently requiring attention.
+            </div>
+          ) : (
+            <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 hide-scrollbar -mx-6 px-6 sm:mx-0 sm:px-0">
+              {claimsRequiringAttention.map(claimItem => (
+                <div
+                  key={claimItem.id}
+                  className="group shrink-0 w-[290px] sm:w-[320px] rounded-xl overflow-hidden bg-surface border border-surface-border/70 hover:border-surface-borderLight transition-all duration-300 hover:scale-[1.02] hover:shadow-cinematic flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Top Image Preview with Procedure Badge */}
+                    <div className="relative h-36 w-full bg-surface-higher overflow-hidden">
+                      <img
+                        src={claimItem.imageUrl}
+                        alt={claimItem.petName}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-black/30" />
 
-                    <div className="absolute top-3 left-3">
-                      <span className="font-mono text-[10px] tracking-wider px-2 py-0.5 rounded bg-black/60 backdrop-blur-md text-petText-secondary border border-white/10">
-                        {claimItem.id.toUpperCase()}
-                      </span>
+                      <div className="absolute top-3 left-3">
+                        <span className="font-mono text-[10px] tracking-wider px-2 py-0.5 rounded bg-black/60 backdrop-blur-md text-petText-secondary border border-white/10">
+                          {claimItem.id.toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="absolute bottom-2.5 left-3 right-3 flex items-baseline justify-between">
+                        <span className="text-base font-bold text-white tracking-tight">
+                          {claimItem.petName}
+                        </span>
+                        <span className="text-lg font-bold font-mono text-white">
+                          ₹{claimItem.amountInr.toLocaleString('en-IN')}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="absolute bottom-2.5 left-3 right-3 flex items-baseline justify-between">
-                      <span className="text-base font-bold text-white tracking-tight">
-                        {claimItem.petName}
-                      </span>
-                      <span className="text-lg font-bold font-mono text-white">
-                        ₹{claimItem.amountInr.toLocaleString('en-IN')}
-                      </span>
+                    {/* Body Details */}
+                    <div className="p-4 space-y-2.5">
+                      <div className="text-xs">
+                        <span className="text-petText-muted block text-[11px]">Procedure / Treatment</span>
+                        <span className="font-medium text-white line-clamp-1">{claimItem.treatment}</span>
+                      </div>
+
+                      {/* Status Pill */}
+                      <div className="pt-1">
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border ${
+                            claimItem.badgeType === 'anomaly'
+                              ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
+                              : claimItem.badgeType === 'alert'
+                              ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
+                              : 'bg-amber-950/60 text-amber-300 border-amber-800/60'
+                          }`}
+                        >
+                          {claimItem.badgeText}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Body Details */}
-                  <div className="p-4 space-y-2.5">
-                    <div className="text-xs">
-                      <span className="text-petText-muted block text-[11px]">Procedure / Treatment</span>
-                      <span className="font-medium text-white line-clamp-1">{claimItem.treatment}</span>
-                    </div>
-
-                    {/* Status Pill */}
-                    <div className="pt-1">
-                      <span
-                        className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-mono font-semibold border ${
-                          claimItem.badgeType === 'anomaly'
-                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
-                            : claimItem.badgeType === 'alert'
-                            ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
-                            : 'bg-amber-950/60 text-amber-300 border-amber-800/60'
-                        }`}
-                      >
-                        {claimItem.badgeText}
-                      </span>
-                    </div>
+                  {/* Action Link */}
+                  <div className="p-4 pt-0">
+                    <Link
+                      to={`/claims/${claimItem.id}`}
+                      className="w-full py-2 px-3 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors group-hover:border-brand-teal/60"
+                    >
+                      <span>Investigate</span>
+                      <ArrowUpRight size={13} className="text-brand-teal" />
+                    </Link>
                   </div>
                 </div>
-
-                {/* Action Link */}
-                <div className="p-4 pt-0">
-                  <Link
-                    to={`/claims/${claimItem.id}`}
-                    className="w-full py-2 px-3 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors group-hover:border-brand-teal/60"
-                  >
-                    <span>Investigate</span>
-                    <ArrowUpRight size={13} className="text-brand-teal" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 
@@ -472,7 +454,7 @@ export const DashboardPage: React.FC = () => {
                   <h3 className="text-sm font-semibold text-white">Risk Distribution</h3>
                   <span className="text-[11px] text-petText-muted">Click segment to filter portfolio</span>
                 </div>
-                <span className="text-xs font-mono text-petText-dim">2,410 Enrolled Lives</span>
+                <span className="text-xs font-mono text-petText-dim">{assessments.length} Underwritten Lives</span>
               </div>
 
               {/* Segmented Risk Bar */}
@@ -560,33 +542,39 @@ export const DashboardPage: React.FC = () => {
               </div>
 
               {/* Clean Restrained SVG Bar Chart */}
-              <div className="h-36 flex items-end justify-between gap-3 pt-3">
-                {MOCK_PORTFOLIO_METRICS.claimsActivity.map(item => {
-                  const maxSub = 95;
-                  const heightSub = (item.submitted / maxSub) * 100;
-                  const heightAppr = (item.approved / maxSub) * 100;
+              {(portfolioMetrics?.claimsActivity || []).length === 0 ? (
+                <div className="h-36 flex items-center justify-center text-xs text-petText-muted">
+                  No monthly claims recorded yet.
+                </div>
+              ) : (
+                <div className="h-36 flex items-end justify-between gap-3 pt-3">
+                  {(portfolioMetrics?.claimsActivity || []).map(item => {
+                    const maxSub = Math.max(...(portfolioMetrics?.claimsActivity || []).map(c => c.submitted), 10);
+                    const heightSub = (item.submitted / maxSub) * 100;
+                    const heightAppr = (item.approved / maxSub) * 100;
 
-                  return (
-                    <div key={item.month} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
-                      <div className="w-full flex items-end justify-center gap-1.5 h-28">
-                        {/* Submitted */}
-                        <div
-                          className="w-2.5 bg-slate-600 rounded-t transition-all group-hover:bg-slate-400"
-                          style={{ height: `${heightSub}%` }}
-                          title={`${item.month} Submitted: ${item.submitted}`}
-                        />
-                        {/* Approved */}
-                        <div
-                          className="w-2.5 bg-brand-teal rounded-t transition-all group-hover:bg-[#139C8B]"
-                          style={{ height: `${heightAppr}%` }}
-                          title={`${item.month} Approved: ${item.approved}`}
-                        />
+                    return (
+                      <div key={item.month} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                        <div className="w-full flex items-end justify-center gap-1.5 h-28">
+                          {/* Submitted */}
+                          <div
+                            className="w-2.5 bg-slate-600 rounded-t transition-all group-hover:bg-slate-400"
+                            style={{ height: `${heightSub}%` }}
+                            title={`${item.month} Submitted: ${item.submitted}`}
+                          />
+                          {/* Approved */}
+                          <div
+                            className="w-2.5 bg-brand-teal rounded-t transition-all group-hover:bg-[#139C8B]"
+                            style={{ height: `${heightAppr}%` }}
+                            title={`${item.month} Approved: ${item.approved}`}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-petText-muted">{item.month.split(' ')[0]}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-petText-muted">{item.month.split(' ')[0]}</span>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="flex items-center justify-center gap-6 text-[11px] text-petText-muted pt-2 border-t border-surface-border">
                 <span className="flex items-center gap-1.5">
@@ -628,15 +616,19 @@ export const DashboardPage: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricCard
               label="Applications"
-              value="24"
-              subtext="Portfolio intake across 4 tiers"
-              trend={{ value: "+4 this week", isNeutral: true }}
+              value={portfolioMetrics ? portfolioMetrics.totalApplications.toString() : assessments.length.toString()}
+              subtext="Portfolio intake in database"
+              trend={{ value: "Live Count", isNeutral: true }}
               icon={FileText}
               onClick={() => navigate('/assessments')}
             />
             <MetricCard
               label="Require Attention"
-              value="7"
+              value={
+                portfolioMetrics
+                  ? portfolioMetrics.requireAttention.toString()
+                  : assessments.filter(a => a.status === 'Under Review' || a.status === 'Information Requested' || a.riskLevel === 'HIGH').length.toString()
+              }
               subtext="Prioritized underwriting queues"
               trend={{ value: "Action required", isPositive: false }}
               icon={AlertCircle}
@@ -645,17 +637,25 @@ export const DashboardPage: React.FC = () => {
             />
             <MetricCard
               label="Claims Under Review"
-              value="18"
-              subtext="Total exposure ₹8.4L pending"
-              trend={{ value: "3 flagged", isNeutral: true }}
+              value={
+                portfolioMetrics
+                  ? portfolioMetrics.claimsUnderReview.toString()
+                  : claims.filter(c => c.status === 'Under Review' || c.status === 'Attention Required').length.toString()
+              }
+              subtext="Active claims pending review"
+              trend={{ value: "Live Queue", isNeutral: true }}
               icon={Clock}
               onClick={() => navigate('/claims')}
             />
             <MetricCard
               label="Information Gaps"
-              value="13"
+              value={
+                portfolioMetrics
+                  ? portfolioMetrics.informationGaps.toString()
+                  : assessments.reduce((sum, a) => sum + (a.informationGaps?.filter(g => g.status !== 'Resolved').length || 0), 0).toString()
+              }
               subtext="Pending veterinary clarifications"
-              trend={{ value: "9 awaiting clinic", isNeutral: true }}
+              trend={{ value: "Awaiting clinic", isNeutral: true }}
               icon={FileQuestion}
               variant="teal"
               onClick={() => navigate('/information-requests')}

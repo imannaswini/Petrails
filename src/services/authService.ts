@@ -26,37 +26,32 @@ export interface AuthResponse {
   };
 }
 
-const DEFAULT_USER: AuthResponse = {
-  token: 'mock-jwt-token-sarah-jenkins',
-  user: {
-    id: 'usr-1',
-    fullName: 'Sarah Jenkins',
-    email: 'sarah.jenkins@petrails.insure',
-    role: 'Senior Underwriting Officer',
-    authorityLimitInr: 500000,
-    organization: 'Tata AIG General Insurance'
-  }
-};
-
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const res = await apiClient.post<AuthResponse>('/auth/login', credentials, DEFAULT_USER);
-    if (res.token) {
+    const res = await apiClient.post<AuthResponse>('/auth/login', credentials);
+    if (res?.token) {
       localStorage.setItem('petrails_auth_token', res.token);
     }
     return res;
   },
 
   async register(payload: RegisterPayload): Promise<AuthResponse> {
-    const res = await apiClient.post<AuthResponse>('/auth/register', payload, DEFAULT_USER);
-    if (res.token) {
+    const res = await apiClient.post<AuthResponse>('/auth/register', payload);
+    if (res?.token) {
       localStorage.setItem('petrails_auth_token', res.token);
     }
     return res;
   },
 
-  async getCurrentUser(): Promise<AuthResponse['user']> {
-    return apiClient.get<AuthResponse['user']>('/auth/me', DEFAULT_USER.user);
+  async getCurrentUser(): Promise<AuthResponse['user'] | null> {
+    const token = localStorage.getItem('petrails_auth_token');
+    if (!token) return null;
+    try {
+      return await apiClient.get<AuthResponse['user']>('/auth/me');
+    } catch {
+      localStorage.removeItem('petrails_auth_token');
+      return null;
+    }
   },
 
   logout(): void {
