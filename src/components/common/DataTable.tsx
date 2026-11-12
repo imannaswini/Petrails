@@ -1,17 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Assessment } from '../../types';
 import { RiskBadge } from './RiskBadge';
-import { ArrowUpDown, AlertCircle, Clock, ChevronRight } from 'lucide-react';
+import { ArrowUpDown, AlertCircle, Clock, MoreVertical, Eye, Pencil, Trash2 } from 'lucide-react';
+import {
+  formatExactLocalDateTime,
+  formatRelativeOrLocalTimestamp,
+  useRelativeTimeTick
+} from '../../utils/dateTime';
 
 interface DataTableProps {
   assessments: Assessment[];
+  onEditAssessment?: (assessment: Assessment) => void;
+  onDeleteAssessment?: (assessment: Assessment) => void;
 }
 
-export const DataTable: React.FC<DataTableProps> = ({ assessments }) => {
+export const DataTable: React.FC<DataTableProps> = ({
+  assessments,
+  onEditAssessment,
+  onDeleteAssessment
+}) => {
   const navigate = useNavigate();
-  const [sortField, setSortField] = useState<keyof Assessment>('combinedScore');
+  const nowMs = useRelativeTimeTick(30000);
+  const [sortField, setSortField] = useState<keyof Assessment>('updatedAt');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleOutside = () => setOpenMenuId(null);
+    window.addEventListener('click', handleOutside);
+    return () => window.removeEventListener('click', handleOutside);
+  }, [openMenuId]);
 
   const handleSort = (field: keyof Assessment) => {
     if (sortField === field) {
@@ -23,6 +43,12 @@ export const DataTable: React.FC<DataTableProps> = ({ assessments }) => {
   };
 
   const sortedData = [...assessments].sort((a, b) => {
+    if (sortField === 'updatedAt') {
+      const timeA = Date.parse(a.updatedAt || a.createdAt || a.lastUpdated || '') || 0;
+      const timeB = Date.parse(b.updatedAt || b.createdAt || b.lastUpdated || '') || 0;
+      return sortAsc ? timeA - timeB : timeB - timeA;
+    }
+
     const valA = a[sortField];
     const valB = b[sortField];
 
@@ -74,7 +100,15 @@ export const DataTable: React.FC<DataTableProps> = ({ assessments }) => {
               <th className="py-3.5 px-4 text-right">ML Score</th>
               <th className="py-3.5 px-4">Info Gaps</th>
               <th className="py-3.5 px-4">Status</th>
-              <th className="py-3.5 px-4">Last Updated</th>
+              <th
+                className="py-3.5 px-4 cursor-pointer hover:text-white transition-colors"
+                onClick={() => handleSort('updatedAt')}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Last Updated</span>
+                  <ArrowUpDown size={12} />
+                </div>
+              </th>
               <th className="py-3.5 px-4 text-center">Action</th>
             </tr>
           </thead>
@@ -159,17 +193,78 @@ export const DataTable: React.FC<DataTableProps> = ({ assessments }) => {
 
                 {/* Last Updated */}
                 <td className="py-3.5 px-4 text-petText-muted font-mono text-[11px]">
-                  <span className="flex items-center gap-1">
+                  <span
+                    className="flex items-center gap-1"
+                    title={formatExactLocalDateTime(asm.updatedAt || asm.createdAt || asm.lastUpdated)}
+                  >
                     <Clock size={11} />
-                    {asm.lastUpdated}
+                    {formatRelativeOrLocalTimestamp(asm.updatedAt || asm.createdAt || asm.lastUpdated, nowMs)}
                   </span>
                 </td>
 
-                {/* Action Link */}
-                <td className="py-3.5 px-4 text-center">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-surface-higher text-petText-secondary group-hover:text-white group-hover:bg-brand-teal group-hover:text-background transition-all">
-                    <ChevronRight size={14} />
-                  </span>
+                {/* Actions Menu */}
+                <td
+                  className="py-3.5 px-4 text-center relative"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setOpenMenuId(openMenuId === asm.id ? null : asm.id);
+                    }}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-petText-secondary hover:text-white transition-colors"
+                    aria-label={`Actions for ${asm.petName}`}
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+
+                  {openMenuId === asm.id && (
+                    <div
+                      onClick={e => e.stopPropagation()}
+                      className="absolute right-4 top-12 z-30 w-44 rounded-xl bg-surface-elevated border border-surface-borderLight shadow-cinematic py-1.5 text-left"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          navigate(`/assessments/${asm.id}`);
+                        }}
+                        className="w-full px-3.5 py-2 text-xs text-petText-primary hover:bg-surface-higher hover:text-white flex items-center gap-2 transition-colors"
+                      >
+                        <Eye size={13} className="text-brand-teal" />
+                        <span>View Assessment</span>
+                      </button>
+
+                      {onEditAssessment && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onEditAssessment(asm);
+                          }}
+                          className="w-full px-3.5 py-2 text-xs text-petText-primary hover:bg-surface-higher hover:text-white flex items-center gap-2 transition-colors"
+                        >
+                          <Pencil size={13} className="text-amber-400" />
+                          <span>Edit Assessment</span>
+                        </button>
+                      )}
+
+                      {onDeleteAssessment && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onDeleteAssessment(asm);
+                          }}
+                          className="w-full px-3.5 py-2 text-xs text-rose-300 hover:bg-rose-950/60 hover:text-rose-200 flex items-center gap-2 transition-colors border-t border-surface-border/60 mt-1 pt-2"
+                        >
+                          <Trash2 size={13} className="text-rose-400" />
+                          <span>Delete Assessment</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

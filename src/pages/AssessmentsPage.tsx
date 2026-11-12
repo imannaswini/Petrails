@@ -1,18 +1,28 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { Assessment } from '../types';
 import { AssessmentCard } from '../components/common/AssessmentCard';
 import { DataTable } from '../components/common/DataTable';
-import { Search, Plus, SlidersHorizontal, X } from 'lucide-react';
-import { RiskLevel, Species } from '../types';
+import { EditAssessmentModal } from '../components/common/EditAssessmentModal';
+import { DeleteAssessmentModal } from '../components/common/DeleteAssessmentModal';
+import { Search, Plus, SlidersHorizontal, X, AlertTriangle, RefreshCw, FileText, CheckCircle2 } from 'lucide-react';
 
 export const AssessmentsPage: React.FC = () => {
-  const { assessments } = useApp();
+  const { assessments, isLoadingBackend, backendError, refreshData } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRisk, setSelectedRisk] = useState<string>('ALL');
   const [selectedSpecies, setSelectedSpecies] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [missingInfoOnly, setMissingInfoOnly] = useState<boolean>(false);
+  const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
+  const [deletingAssessment, setDeletingAssessment] = useState<Assessment | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setActionFeedback(msg);
+    setTimeout(() => setActionFeedback(null), 4500);
+  };
 
   // Filter logic
   const filtered = assessments.filter(asm => {
@@ -29,8 +39,23 @@ export const AssessmentsPage: React.FC = () => {
     return matchesSearch && matchesRisk && matchesSpecies && matchesStatus && matchesGaps;
   });
 
-  // Priority cards for top hybrid section
-  const priorityCases = filtered.slice(0, 3);
+  // Priority cases: pending / high-risk / gap-flagged cases sorted by priority & latest update
+  const priorityCases = [...filtered]
+    .filter(
+      asm =>
+        asm.status !== 'Approved' ||
+        asm.riskLevel === 'HIGH' ||
+        asm.informationGapsCount > 0
+    )
+    .sort((a, b) => {
+      const aHigh = a.riskLevel === 'HIGH' ? 1 : 0;
+      const bHigh = b.riskLevel === 'HIGH' ? 1 : 0;
+      if (aHigh !== bHigh) return bHigh - aHigh;
+      const timeA = Date.parse(a.updatedAt || a.createdAt || a.lastUpdated || '') || 0;
+      const timeB = Date.parse(b.updatedAt || b.createdAt || b.lastUpdated || '') || 0;
+      return timeB - timeA;
+    })
+    .slice(0, 3);
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -162,58 +187,147 @@ export const AssessmentsPage: React.FC = () => {
 
         {/* Count summary */}
         <div className="flex items-center justify-between text-[11px] font-mono text-petText-dim pt-2 border-t border-surface-border/60">
-          <span>Showing {filtered.length} of {assessments.length} assessment records</span>
-          <span>Dual-Engine Synthesis: Deterministic Rule Matrix + XGBoost Actuarial ML</span>
+          <span>Showing {filtered.length} of {assessments.length} authorized assessment records</span>
+          <span>Dual-Engine Synthesis: Deterministic Rule Engine + Random Forest ML &amp; SHAP</span>
         </div>
       </div>
 
-      {/* Hybrid Layout Part 1: Large Visual Priority Cards at Top */}
-      {priorityCases.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-              <span>Priority Underwriting Cases</span>
-              <span className="text-xs font-mono text-brand-teal bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/40">
-                Action Pending
-              </span>
-            </h2>
-            <span className="text-xs text-petText-dim">Hybrid Visual View</span>
+      {/* Action Feedback Toast */}
+      {actionFeedback && (
+        <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-800/60 flex items-center justify-between gap-3 text-xs text-emerald-200 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+            <span>{actionFeedback}</span>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {priorityCases.map(asm => (
-              <AssessmentCard key={asm.id} assessment={asm} />
-            ))}
-          </div>
-        </section>
+          <button
+            type="button"
+            onClick={() => setActionFeedback(null)}
+            className="text-emerald-300 hover:text-white"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
 
-      {/* Hybrid Layout Part 2: Dense Table/List below for Professional Review */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white tracking-tight">
-            Complete Underwriting Registry
-          </h2>
-          <span className="text-xs font-mono text-petText-muted">
-            Sortable Matrix
-          </span>
-        </div>
-
-        {filtered.length > 0 ? (
-          <DataTable assessments={filtered} />
-        ) : (
-          <div className="p-12 text-center rounded-xl bg-surface border border-surface-border space-y-3">
-            <p className="text-sm font-semibold text-white">No assessments match your current filter criteria</p>
-            <p className="text-xs text-petText-dim">Try clearing your filters or search keywords.</p>
-            <button
-              onClick={resetFilters}
-              className="px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher text-xs font-medium text-white transition-colors"
-            >
-              Reset Filters
-            </button>
+      {/* Backend Error Banner */}
+      {backendError && (
+        <div className="p-4 rounded-xl bg-rose-950/50 border border-rose-800/60 flex items-center justify-between gap-3 text-xs text-rose-200">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle size={16} className="text-rose-400 shrink-0" />
+            <span>{backendError}</span>
           </div>
-        )}
-      </section>
+          <button
+            type="button"
+            onClick={() => refreshData()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-900/60 hover:bg-rose-900 border border-rose-700/60 text-white font-semibold transition-colors"
+          >
+            <RefreshCw size={12} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
+      {/* Loading / True Empty State / Content */}
+      {isLoadingBackend && assessments.length === 0 ? (
+        <div className="p-12 text-center rounded-xl bg-surface border border-surface-border space-y-3">
+          <div className="w-7 h-7 border-2 border-brand-teal border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-white">Loading Authorized Assessments...</p>
+          <p className="text-xs text-petText-muted">Fetching underwriting records from FastAPI &amp; MongoDB Atlas.</p>
+        </div>
+      ) : assessments.length === 0 && !backendError ? (
+        <div className="p-12 text-center rounded-xl bg-surface border border-surface-border space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-surface-elevated border border-surface-border flex items-center justify-center mx-auto text-brand-teal">
+            <FileText size={22} />
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-bold text-white">No underwriting assessments yet</p>
+            <p className="text-xs text-petText-secondary max-w-md mx-auto">
+              Your account has no assessments on record. Run a new risk assessment to generate deterministic rule scores, Random Forest predictions, and SHAP attributions.
+            </p>
+          </div>
+          <Link
+            to="/assessments/new"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-teal hover:bg-teal-400 text-background font-semibold text-xs tracking-wide transition-colors"
+          >
+            <Plus size={15} />
+            <span>New Risk Assessment</span>
+          </Link>
+        </div>
+      ) : (
+        <>
+          {/* Hybrid Layout Part 1: Large Visual Priority Cards at Top */}
+          {priorityCases.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                  <span>Priority Underwriting Cases</span>
+                  <span className="text-xs font-mono text-brand-teal bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/40">
+                    Action Pending
+                  </span>
+                </h2>
+                <span className="text-xs text-petText-dim">Hybrid Visual View</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {priorityCases.map(asm => (
+                  <AssessmentCard key={asm.id} assessment={asm} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Hybrid Layout Part 2: Dense Table/List below for Professional Review */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-white tracking-tight">
+                Complete Underwriting Registry
+              </h2>
+              <span className="text-xs font-mono text-petText-muted">
+                Sortable Matrix
+              </span>
+            </div>
+
+            {filtered.length > 0 ? (
+              <DataTable
+                assessments={filtered}
+                onEditAssessment={asm => setEditingAssessmentId(asm.id)}
+                onDeleteAssessment={asm => setDeletingAssessment(asm)}
+              />
+            ) : (
+              <div className="p-12 text-center rounded-xl bg-surface border border-surface-border space-y-3">
+                <p className="text-sm font-semibold text-white">No assessments match your current filter criteria</p>
+                <p className="text-xs text-petText-dim">Try clearing your filters or search keywords.</p>
+                <button
+                  onClick={resetFilters}
+                  className="px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-higher text-xs font-medium text-white transition-colors"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {/* Edit & Reassess Modal */}
+      <EditAssessmentModal
+        assessmentId={editingAssessmentId}
+        onClose={() => setEditingAssessmentId(null)}
+        onSuccess={updated =>
+          showToast(
+            `Assessment ${updated.id} (${updated.petName}) updated & reassessed: ${updated.combinedScore} (${updated.riskLevel}).`
+          )
+        }
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteAssessmentModal
+        assessment={deletingAssessment}
+        onClose={() => setDeletingAssessment(null)}
+        onDeleted={deletedId =>
+          showToast(`Assessment ${deletedId} archived. Linked pet and audit records preserved.`)
+        }
+      />
     </div>
   );
 };

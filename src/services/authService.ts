@@ -21,6 +21,7 @@ export interface AuthResponse {
     fullName: string;
     email: string;
     role: string;
+    authorityTier?: string;
     authorityLimitInr: number;
     organization: string;
   };

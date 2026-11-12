@@ -28,7 +28,8 @@ DEFAULT_SEED_USERS = {
         "id": "usr-1",
         "fullName": "Sarah Jenkins",
         "email": "sarah.jenkins@petrails.insure",
-        "role": "Senior Underwriting Officer",
+        "role": "Insurance Professional",
+        "authorityTier": "tier-3",
         "authorityLimitInr": 500000,
         "organization": "Tata AIG General Insurance"
     },
@@ -36,7 +37,8 @@ DEFAULT_SEED_USERS = {
         "id": "usr-2",
         "fullName": "Rajesh Gupta",
         "email": "rajesh.gupta@petrails.insure",
-        "role": "Senior Claims Adjuster",
+        "role": "Insurance Professional",
+        "authorityTier": "tier-2",
         "authorityLimitInr": 400000,
         "organization": "Tata AIG General Insurance"
     }
@@ -74,7 +76,9 @@ async def login(payload: LoginRequest):
         token = create_access_token({
             "sub": user_record["id"],
             "email": user_record["email"],
-            "role": user_record["role"]
+            "role": user_record.get("role", "Insurance Professional"),
+            "authorityTier": user_record.get("authorityTier", "tier-3"),
+            "authorityLimitInr": user_record.get("authorityLimitInr", 500000)
         })
         return AuthResponse(token=token, user=UserResponse(**clean_mongo_user(user_record)))
 
@@ -107,7 +111,9 @@ async def login(payload: LoginRequest):
     token = create_access_token({
         "sub": user["id"],
         "email": user["email"],
-        "role": user.get("role", "Underwriter")
+        "role": user.get("role", "Insurance Professional"),
+        "authorityTier": user.get("authorityTier", "tier-3"),
+        "authorityLimitInr": user.get("authorityLimitInr", 500000)
     })
 
     return AuthResponse(
@@ -119,20 +125,35 @@ async def login(payload: LoginRequest):
 async def register(payload: RegisterRequest):
     email_clean = payload.workEmail.lower()
 
-    tier_limits = {
-        "tier-1": 250000,
-        "tier-2": 500000,
-        "tier-3": 1000000,
-        "tier-4": 2500000
-    }
-    limit = tier_limits.get(payload.authorityTier.lower(), 500000)
+    tier_raw = (payload.authorityTier or "tier-2").lower()
+    if "tier-1" in tier_raw or "tier 1" in tier_raw or "150000" in tier_raw:
+        resolved_tier = "tier-1"
+        limit = 150000
+    elif "300000" in tier_raw:
+        resolved_tier = "tier-2"
+        limit = 300000
+    elif "tier-2" in tier_raw or "tier 2" in tier_raw:
+        resolved_tier = "tier-2"
+        limit = 500000
+    elif "tier-3" in tier_raw or "tier 3" in tier_raw or "1000000" in tier_raw:
+        resolved_tier = "tier-3"
+        limit = 1000000
+    elif "tier-4" in tier_raw or "tier 4" in tier_raw or "2500000" in tier_raw or "unlimited" in tier_raw:
+        resolved_tier = "tier-4"
+        limit = 2500000
+    else:
+        resolved_tier = "tier-2"
+        limit = 500000
+
+    user_role = payload.role.strip() if payload.role and payload.role.strip() else "Insurance Professional"
     user_id = f"usr-{uuid.uuid4().hex[:8]}"
 
     user_doc = {
         "id": user_id,
         "fullName": payload.fullName,
         "email": email_clean,
-        "role": payload.role,
+        "role": user_role,
+        "authorityTier": resolved_tier,
         "authorityLimitInr": limit,
         "organization": payload.organization,
         "hashedPassword": hash_password(payload.password or "Petrails@2026")
@@ -158,7 +179,9 @@ async def register(payload: RegisterRequest):
     token = create_access_token({
         "sub": user_id,
         "email": user_doc["email"],
-        "role": user_doc["role"]
+        "role": user_doc["role"],
+        "authorityTier": user_doc["authorityTier"],
+        "authorityLimitInr": user_doc["authorityLimitInr"]
     })
 
     return AuthResponse(
@@ -184,17 +207,19 @@ async def get_current_user_profile(token_payload: Optional[Dict[str, Any]] = Dep
             id=user_id,
             fullName=token_payload.get("email", "User").split("@")[0].replace(".", " ").title(),
             email=token_payload.get("email", "user@petrails.insure"),
-            role=token_payload.get("role", "Underwriter"),
-            authorityLimitInr=500000,
+            role=token_payload.get("role", "Insurance Professional"),
+            authorityTier=token_payload.get("authorityTier", "tier-3"),
+            authorityLimitInr=token_payload.get("authorityLimitInr", 500000),
             organization="Tata AIG General Insurance"
         )
 
-    # Fallback to default lead underwriter
+    # Fallback to default lead insurance professional
     return UserResponse(
         id="usr-1",
         fullName="Sarah Jenkins",
         email="sarah.jenkins@petrails.insure",
-        role="Senior Underwriting Officer",
+        role="Insurance Professional",
+        authorityTier="tier-3",
         authorityLimitInr=500000,
         organization="Tata AIG General Insurance"
     )

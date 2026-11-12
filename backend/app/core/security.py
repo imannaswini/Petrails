@@ -13,6 +13,7 @@ security_scheme = HTTPBearer(auto_error=False)
 
 # Recognized PETRAILS organizational roles
 RECOGNIZED_ROLES = [
+    "Insurance Professional",
     "Underwriter",
     "Senior Underwriting Officer",
     "Claims Officer",
@@ -21,6 +22,28 @@ RECOGNIZED_ROLES = [
     "Risk Analyst",
     "Administrator"
 ]
+
+AUTHORITY_TIER_LIMITS: Dict[str, int] = {
+    "tier-1": 150000,
+    "tier-2": 500000,
+    "tier-3": 1000000,
+    "tier-4": 2500000
+}
+
+def resolve_authority_limit(tier_string: str) -> int:
+    """Resolve an authority tier string or description to numeric INR cap."""
+    tier_clean = (tier_string or "").lower()
+    if "150000" in tier_clean or "tier-1" in tier_clean or "tier 1" in tier_clean:
+        return AUTHORITY_TIER_LIMITS["tier-1"]
+    if "300000" in tier_clean:
+        return 300000
+    if "tier-2" in tier_clean or "tier 2" in tier_clean:
+        return AUTHORITY_TIER_LIMITS["tier-2"]
+    if "tier-3" in tier_clean or "tier 3" in tier_clean:
+        return AUTHORITY_TIER_LIMITS["tier-3"]
+    if "tier-4" in tier_clean or "tier 4" in tier_clean or "unlimited" in tier_clean:
+        return AUTHORITY_TIER_LIMITS["tier-4"]
+    return AUTHORITY_TIER_LIMITS["tier-2"]
 
 def hash_password(password: str) -> str:
     """Hash a plaintext password using bcrypt with salt rounds."""
@@ -91,13 +114,13 @@ async def get_optional_user_payload(credentials: Optional[HTTPAuthorizationCrede
 def require_roles(allowed_roles: List[str]):
     """
     Role-based authorization dependency factory.
-    Verifies token claims against allowed role types:
-    Underwriter, Claims Officer, Veterinary Medical Officer, Risk Analyst, Administrator.
+    Verifies token claims against allowed role types.
+    Administrator and Insurance Professional have universal access to core insurance workflows.
     """
     def role_checker(token_payload: Dict[str, Any] = Depends(get_current_user_payload)) -> Dict[str, Any]:
         user_role = token_payload.get("role", "")
-        # Administrator has universal permission
-        if user_role == "Administrator":
+        # Administrator and Insurance Professional have universal platform permission
+        if user_role in ("Administrator", "Insurance Professional"):
             return token_payload
 
         # Case-insensitive substring or match

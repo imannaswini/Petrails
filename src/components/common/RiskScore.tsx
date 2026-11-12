@@ -7,8 +7,8 @@ interface RiskScoreProps {
   ruleScore: number;
   mlScore: number;
   riskLevel: RiskLevel;
-  confidence?: number;
-  calibrationBand?: string;
+  inferenceMode?: 'TRAINED_MODEL' | 'FALLBACK' | 'UNAVAILABLE';
+  modelVersion?: string | null;
   className?: string;
 }
 
@@ -17,8 +17,8 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
   ruleScore,
   mlScore,
   riskLevel,
-  confidence = 91,
-  calibrationBand = 'Calibrated ±3.2%',
+  inferenceMode = 'UNAVAILABLE',
+  modelVersion,
   className = ''
 }) => {
   // Visual radius and circumference calculation for circular SVG ring
@@ -33,21 +33,21 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
       glow: 'rgba(16, 185, 129, 0.25)',
       badge: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/60',
       label: 'LOW RISK',
-      desc: 'Standard underwriting acceptance tier'
+      desc: 'Lowest backend risk classification'
     },
     MEDIUM: {
       stroke: '#F59E0B', // Amber
       glow: 'rgba(245, 158, 11, 0.25)',
       badge: 'text-amber-400 bg-amber-950/40 border-amber-800/60',
       label: 'MEDIUM RISK',
-      desc: 'Requires conditional review or verification'
+      desc: 'Intermediate backend risk classification'
     },
     HIGH: {
       stroke: '#EF4444', // Red
       glow: 'rgba(239, 68, 68, 0.25)',
       badge: 'text-rose-400 bg-rose-950/40 border-rose-800/60',
       label: 'HIGH RISK',
-      desc: 'Elevated claim hazard; senior refer required'
+      desc: 'Highest backend risk classification'
     }
   }[riskLevel];
 
@@ -57,10 +57,6 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
         <div>
           <span className="text-xs font-mono uppercase tracking-widest text-petText-muted">Assessment Matrix</span>
           <h3 className="text-base font-semibold text-petText-primary">Actuarial Risk Synthesis</h3>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-petText-secondary bg-surface-elevated px-2.5 py-1 rounded-md border border-surface-border">
-          <CheckCircle2 size={13} className="text-brand-teal" />
-          <span>{calibrationBand}</span>
         </div>
       </div>
 
@@ -133,7 +129,7 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
               />
             </div>
             <span className="text-[11px] text-petText-muted mt-1 block">
-              Guidewire underwriting policies, breed baseline exclusions &amp; age limits
+              Age bands, configured breed matches, and structured medical history
             </span>
           </div>
 
@@ -142,7 +138,7 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
             <div className="flex items-center justify-between text-xs mb-1.5">
               <div className="flex items-center gap-2 text-petText-secondary font-medium">
                 <Cpu size={14} className="text-brand-teal" />
-                <span>Actuarial Gradient Boost Model</span>
+                <span>ML Inference ({inferenceMode.replace('_', ' ')})</span>
               </div>
               <span className="font-mono font-semibold text-petText-primary">{mlScore} / 100</span>
             </div>
@@ -153,8 +149,7 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
               />
             </div>
             <div className="flex items-center justify-between text-[11px] text-petText-muted mt-1">
-              <span>Multivariate SHAP trained on 420,000+ veterinary outcomes</span>
-              <span className="text-brand-teal font-medium">Conf: {confidence}%</span>
+              <span>{modelVersion ? `Model version ${modelVersion}` : 'Model version unavailable'}</span>
             </div>
           </div>
 
@@ -164,7 +159,7 @@ export const RiskScore: React.FC<RiskScoreProps> = ({
               <Shield size={13} className="text-petText-muted" />
               <span>Synthesis Weighting:</span>
             </div>
-            <span className="font-mono text-petText-muted">40% Rules + 60% ML Predictive</span>
+            <span className="font-mono text-petText-muted">40% Rules + 60% ML (provisional)</span>
           </div>
         </div>
       </div>

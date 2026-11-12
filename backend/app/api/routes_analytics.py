@@ -1,6 +1,11 @@
-from fastapi import APIRouter
-from typing import Dict, Any, List
+from fastapi import APIRouter, Depends
+from typing import Dict, Any, List, Optional
 from app.core.config import settings
+from app.core.security import get_optional_user_payload
+from app.api.routes_assessments import (
+    resolve_authenticated_actor,
+    build_assessment_access_query
+)
 from app.core.database import (
     get_assessments_collection,
     get_claims_collection,
@@ -22,17 +27,12 @@ router = APIRouter()
 TEST_METRICS_OVERRIDE: Dict[str, Any] = {}
 
 @router.get("/portfolio", response_model=PortfolioMetricsSchema, tags=["Analytics"])
-async def get_portfolio_analytics():
+async def get_portfolio_analytics(
+    token_payload: Optional[Dict[str, Any]] = Depends(get_optional_user_payload)
+):
     """
-    Compute real-time portfolio metrics across MongoDB Atlas collections:
-    - Total underwriting applications
-    - Items requiring attention
-    - Active claims under review
-    - Pending information inquiries
-    - Risk tier distribution
-    - Species breakdown
-    - Breed-level actuarial risk trends
-    - Historical monthly claims activity
+    Compute real-time portfolio metrics across MongoDB Atlas collections scoped
+    to the authenticated user's authorized assessments.
     """
     if TEST_METRICS_OVERRIDE:
         return PortfolioMetricsSchema(**TEST_METRICS_OVERRIDE)
@@ -49,35 +49,51 @@ async def get_portfolio_analytics():
             breedRiskTrends=[]
         )
 
+    if isinstance(token_payload, dict) and (token_payload.get("sub") or token_payload.get("email")):
+        actor = await resolve_authenticated_actor(token_payload)
+        access_query = build_assessment_access_query(actor)
+    else:
+        access_query = {"id": "__unauthorized__"}
+
     assessments_coll = get_assessments_collection()
     claims_coll = get_claims_collection()
     pets_coll = get_pets_collection()
-    info_coll = get_information_requests_collection()
 
-    # 1. Total applications
-    total_apps = await assessments_coll.count_documents({})
+    # 1. Total authorized applications
+    total_apps = await assessments_coll.count_documents(access_query)
 
-    # 2. Require attention (status in PENDING or REFER, or high risk)
+    # 2. Require attention (pending review/info/referral or HIGH risk)
     require_attention = await assessments_coll.count_documents({
-        "$or": [
-            {"status": {"$in": ["PENDING", "REFER", "FLAGGED"]}},
-            {"riskTier": "HIGH"}
+        "$and": [
+            access_query,
+            {
+                "$or": [
+                    {"status": {"$in": ["Under Review", "Information Requested", "Attention Required", "Referred", "PENDING", "REFER", "FLAGGED"]}},
+                    {"riskLevel": "HIGH"}
+                ]
+            }
         ]
     })
 
     # 3. Claims under review
     claims_under_review = await claims_coll.count_documents({
-        "status": {"$in": ["SUBMITTED", "IN_REVIEW", "PENDING", "FLAGGED"]}
+        "status": {"$in": ["Under Review", "Attention Required", "Flagged", "SUBMITTED", "IN_REVIEW", "PENDING", "FLAGGED"]}
     })
 
-    # 4. Information gaps
-    info_gaps = await info_coll.count_documents({
-        "status": {"$in": ["DISPATCHED", "PENDING"]}
-    })
+    # 4. Unresolved information gaps across authorized assessments
+    gaps_pipeline = [
+        {"$match": access_query},
+        {"$group": {"_id": None, "totalGaps": {"$sum": "$informationGapsCount"}}}
+    ]
+    gaps_cursor = await assessments_coll.aggregate(gaps_pipeline)
+    info_gaps = 0
+    async for doc in gaps_cursor:
+        info_gaps = int(doc.get("totalGaps") or 0)
 
-    # 5. Risk distribution
+    # 5. Risk distribution across authorized assessments (percentages 0-100)
     risk_pipeline = [
-        {"$group": {"_id": "$riskTier", "count": {"$sum": 1}}}
+        {"$match": access_query},
+        {"$group": {"_id": "$riskLevel", "count": {"$sum": 1}}}
     ]
     risk_cursor = await assessments_coll.aggregate(risk_pipeline)
     risk_counts = {"LOW": 0, "MODERATE": 0, "HIGH": 0}
@@ -92,35 +108,36 @@ async def get_portfolio_analytics():
             risk_counts["HIGH"] += count
 
     risk_dist = RiskDistributionSchema(
-        low=risk_counts["LOW"],
-        medium=risk_counts["MODERATE"],
-        high=risk_counts["HIGH"]
+        low=round((risk_counts["LOW"] / total_apps) * 100) if total_apps > 0 else 0,
+        medium=round((risk_counts["MODERATE"] / total_apps) * 100) if total_apps > 0 else 0,
+        high=round((risk_counts["HIGH"] / total_apps) * 100) if total_apps > 0 else 0
     )
 
-    # 6. Species breakdown from pets collection
-    total_pets = await pets_coll.count_documents({})
+    # 6. Species breakdown across authorized assessments
     species_breakdown: List[SpeciesBreakdownItemSchema] = []
-    if total_pets > 0:
+    if total_apps > 0:
         species_pipeline = [
+            {"$match": access_query},
             {"$group": {"_id": "$species", "count": {"$sum": 1}}}
         ]
-        sp_cursor = await pets_coll.aggregate(species_pipeline)
+        sp_cursor = await assessments_coll.aggregate(species_pipeline)
         async for doc in sp_cursor:
             species_name = doc.get("_id") or "Other"
             count = doc.get("count", 0)
-            pct = round((count / total_pets) * 100, 1)
+            pct = round((count / total_apps) * 100, 1)
             species_breakdown.append(SpeciesBreakdownItemSchema(
                 species=species_name,
                 percentage=pct,
                 count=count
             ))
 
-    # 7. Breed risk trends from assessments
+    # 7. Breed risk trends from authorized assessments
     breed_pipeline = [
+        {"$match": access_query},
         {
             "$group": {
                 "_id": "$breed",
-                "avgRiskScore": {"$avg": "$riskScore"},
+                "avgRiskScore": {"$avg": "$combinedScore"},
                 "sampleSize": {"$sum": 1}
             }
         },

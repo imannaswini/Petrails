@@ -30,10 +30,10 @@ export const SignInPage: React.FC = () => {
     }
   };
 
-  const handleQuickDemoLogin = async (role: 'underwriter' | 'claims') => {
+  const handleQuickDemoLogin = async (tier: 'tier-3' | 'tier-2') => {
     setIsLoading(true);
     setErrorMessage(null);
-    const targetEmail = role === 'underwriter' 
+    const targetEmail = tier === 'tier-3' 
       ? 'sarah.jenkins@petrails.insure' 
       : 'rajesh.gupta@petrails.insure';
     setEmail(targetEmail);
@@ -118,18 +118,18 @@ export const SignInPage: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickDemoLogin('underwriter')}
+                  onClick={() => handleQuickDemoLogin('tier-3')}
                   className="flex-1 py-2 px-3 rounded-lg bg-surface hover:bg-surface-higher border border-surface-border text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <UserCheck size={13} className="text-brand-teal" />
-                  <span>Sarah Jenkins (Underwriter)</span>
+                  <span>Sarah Jenkins (Tier 3)</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleQuickDemoLogin('claims')}
+                  onClick={() => handleQuickDemoLogin('tier-2')}
                   className="py-2 px-3 rounded-lg bg-surface hover:bg-surface-higher border border-surface-border text-xs font-semibold text-petText-secondary hover:text-white transition-colors"
                 >
-                  <span>Claims Adjuster</span>
+                  <span>Rajesh Gupta (Tier 2)</span>
                 </button>
               </div>
             </div>

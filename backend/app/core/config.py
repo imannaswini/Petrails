@@ -1,7 +1,16 @@
 import os
+from pathlib import Path
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
+# Explicitly resolve environment paths across root and backend directories
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+ROOT_DIR = BACKEND_DIR.parent
+ENV_FILES = [
+    str(ROOT_DIR / ".env"),
+    str(BACKEND_DIR / ".env"),
+]
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "PETRAILS Actuarial Intelligence API"
@@ -9,9 +18,9 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     
-    # MongoDB Atlas Configuration
+    # MongoDB Atlas Configuration with live production URI fallback
     MONGODB_URI: str = Field(
-        default="mongodb+srv://petrails_admin:PetrailsAtlas2026@cluster0.mongodb.net/?retryWrites=true&w=majority",
+        default="mongodb+srv://iammannaswini_db_user:curl8DeHkzKFUxXa@petrails.asxljqd.mongodb.net/?retryWrites=true&w=majority",
         description="MongoDB Atlas connection URI"
     )
     MONGODB_DATABASE: str = Field(
@@ -45,10 +54,11 @@ class Settings(BaseSettings):
         return "mongodb+srv://" in self.MONGODB_URI or "mongodb.net" in self.MONGODB_URI
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore"
     )
 
 settings = Settings()
+
 

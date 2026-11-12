@@ -24,7 +24,17 @@ from app.api.routes_assessments import (
     request_information,
     TEST_ASSESSMENTS_STORE
 )
+from app.core.security import create_access_token, decode_access_token
 from app.services.intelligence_service import underwriting_rule_engine, predictive_risk_model
+
+AUTH_TIER3_TOKEN_PAYLOAD = decode_access_token(create_access_token({
+    "sub": "usr-test-uw3",
+    "email": "priya.nair@petrails.insure",
+    "fullName": "Priya Nair",
+    "role": "Insurance Professional",
+    "authorityTier": "tier-3",
+    "authorityLimitInr": 1000000
+}))
 
 def run_sync(coro):
     """Execute coroutine synchronously without event loop deadlock."""
@@ -78,13 +88,13 @@ def test_assessment_lifecycle_workflow():
         ]
     )
     # 1. Create assessment
-    created = run_sync(create_assessment(asm_payload))
+    created = run_sync(create_assessment(asm_payload, AUTH_TIER3_TOKEN_PAYLOAD))
     assert created["id"] == "asm-test-01"
     assert created["combinedScore"] > 0
     assert len(created["contributingFactors"]) > 0
 
     # 2. Get assessment
-    retrieved = run_sync(get_assessment("asm-test-01"))
+    retrieved = run_sync(get_assessment("asm-test-01", AUTH_TIER3_TOKEN_PAYLOAD))
     assert retrieved["petName"] == "Simba"
 
     # 3. Record decision
@@ -93,12 +103,13 @@ def test_assessment_lifecycle_workflow():
         notes="Clinically approved under standard terms.",
         stipulation="Annual dental prophylaxis required."
     )
-    dec_res = run_sync(record_underwriter_decision("asm-test-01", dec_payload))
+    dec_res = run_sync(record_underwriter_decision("asm-test-01", dec_payload, AUTH_TIER3_TOKEN_PAYLOAD))
     assert dec_res["success"] is True
     assert dec_res["decision"]["action"] == "Approve"
+    assert dec_res["decision"]["user"] == "Priya Nair"
 
     # Verify status updated
-    updated_asm = run_sync(get_assessment("asm-test-01"))
+    updated_asm = run_sync(get_assessment("asm-test-01", AUTH_TIER3_TOKEN_PAYLOAD))
     assert updated_asm["status"] == "Approved"
     assert len(updated_asm["decisionHistory"]) == 1
 
@@ -109,7 +120,7 @@ def test_assessment_lifecycle_workflow():
         urgency="Standard (48h)",
         questions=["Please attach latest DHPP batch certificate."]
     )
-    info_res = run_sync(request_information("asm-test-01", info_payload))
+    info_res = run_sync(request_information("asm-test-01", info_payload, AUTH_TIER3_TOKEN_PAYLOAD))
     assert info_res["success"] is True
     assert "dispatched" in info_res["message"].lower()
 

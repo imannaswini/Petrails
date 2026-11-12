@@ -21,30 +21,43 @@ import {
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
-  const { pets, assessments, claims, openRequestInfoModal } = useApp();
+  const { pets, assessments, claims, openRequestInfoModal, currentUser } = useApp();
   const navigate = useNavigate();
   const [selectedRiskFilter, setSelectedRiskFilter] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
 
   const [portfolioMetrics, setPortfolioMetrics] = useState<PortfolioMetrics | null>(null);
 
   useEffect(() => {
+    if (!localStorage.getItem('petrails_auth_token')) {
+      setPortfolioMetrics(null);
+      return;
+    }
     analyticsService.getPortfolioMetrics()
       .then(setPortfolioMetrics)
       .catch(() => {});
-  }, [assessments.length, claims.length]);
+  }, [assessments, claims]);
 
-  // Dynamic Continue Working list derived from real pets
-  const continueWorkingPets = pets.slice(0, 5).map(pet => {
-    const matchingAsm = assessments.find(a => a.petId === pet.id);
-    const statusLabel = pet.policyStatus === 'Active'
-      ? (matchingAsm ? `${matchingAsm.riskLevel} RISK` : 'ACTIVE POLICY')
-      : 'REVIEW REQUIRED';
-    return { pet, statusLabel };
-  });
+  // Dynamic Continue Working list scoped to the authenticated user's authorized assessments
+  const authorizedPetIds = new Set(assessments.map(a => a.petId));
+  const continueWorkingPets = pets
+    .filter(pet => authorizedPetIds.has(pet.id))
+    .slice(0, 5)
+    .map(pet => {
+      const matchingAsm = assessments.find(a => a.petId === pet.id);
+      const statusLabel = pet.policyStatus === 'Active'
+        ? (matchingAsm ? `${matchingAsm.riskLevel} RISK` : 'ACTIVE POLICY')
+        : 'REVIEW REQUIRED';
+      return { pet, statusLabel };
+    });
 
-  // Dynamic Priority Assessments derived from real assessments
-  const priorityAssessmentsData = assessments
-    .filter(a => a.status === 'Under Review' || a.status === 'Information Requested' || a.status === 'Attention Required' || a.riskLevel === 'HIGH' || a.riskLevel === 'MEDIUM')
+  // Dynamic Priority Assessments derived from real authorized assessments
+  const priorityAssessmentsData = [...assessments]
+    .filter(a => a.status !== 'Approved' || a.riskLevel === 'HIGH' || a.informationGapsCount > 0)
+    .sort((a, b) => {
+      const timeA = Date.parse(a.updatedAt || a.createdAt || a.lastUpdated || '') || 0;
+      const timeB = Date.parse(b.updatedAt || b.createdAt || b.lastUpdated || '') || 0;
+      return timeB - timeA;
+    })
     .slice(0, 4)
     .map(asm => ({
       id: asm.id,
@@ -84,10 +97,10 @@ export const DashboardPage: React.FC = () => {
   const medCount = assessments.filter(a => a.riskLevel === 'MEDIUM').length;
   const highCount = assessments.filter(a => a.riskLevel === 'HIGH').length;
 
-  const riskDistribution = portfolioMetrics?.riskDistribution || {
-    low: totalAsm > 0 ? Math.round((lowCount / totalAsm) * 100) : 0,
-    medium: totalAsm > 0 ? Math.round((medCount / totalAsm) * 100) : 0,
-    high: totalAsm > 0 ? Math.round((highCount / totalAsm) * 100) : 0,
+  const riskDistribution = {
+    low: totalAsm > 0 ? Math.round((lowCount / totalAsm) * 100) : (portfolioMetrics?.riskDistribution?.low || 0),
+    medium: totalAsm > 0 ? Math.round((medCount / totalAsm) * 100) : (portfolioMetrics?.riskDistribution?.medium || 0),
+    high: totalAsm > 0 ? Math.round((highCount / totalAsm) * 100) : (portfolioMetrics?.riskDistribution?.high || 0),
   };
 
   const handleRiskBarClick = (level: 'LOW' | 'MEDIUM' | 'HIGH') => {
@@ -136,23 +149,25 @@ export const DashboardPage: React.FC = () => {
           <div className="max-w-[680px] space-y-3.5">
             {/* Small uppercase eyebrow */}
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-brand-teal font-medium">
-              GOOD MORNING, SARAH
+              GOOD MORNING, {currentUser?.fullName?.split(' ')[0]?.toUpperCase() || 'INSURANCE PROFESSIONAL'}
             </span>
 
             {/* Editorial 2-line headline */}
             <h1 className="text-3xl sm:text-5xl lg:text-[54px] font-bold tracking-tight text-white leading-[1.12]">
-              Underwriting, with clarity.
+              Portfolio Intelligence, with clarity.
             </h1>
 
             {/* Subtitle */}
             <p className="text-sm sm:text-base text-petText-secondary leading-relaxed font-light">
-              Understand risk, investigate claims, and make informed decisions across your pet insurance portfolio.
+              Unified insurance platform: underwrite risk, adjudicate claims, and monitor actuarial performance within your authority limit.
             </p>
 
             {/* Small status line */}
             <p className="text-xs font-mono text-petText-muted flex items-center gap-2 pt-0.5">
               <span className="w-2 h-2 rounded-full bg-brand-teal animate-pulse" />
-              <span>24 applications require your attention.</span>
+              <span>
+                {assessments.filter(a => a.status === 'Under Review' || a.status === 'Information Requested').length} applications &amp; {claims.filter(c => c.status === 'Under Review' || c.status === 'Attention Required').length} claims require your attention.
+              </span>
             </p>
 
             {/* CTAs */}
@@ -198,7 +213,7 @@ export const DashboardPage: React.FC = () => {
               to="/assessments"
               className="text-xs font-semibold text-brand-teal hover:underline flex items-center gap-1"
             >
-              <span>View all ({pets.length})</span>
+              <span>View all ({assessments.length})</span>
               <ChevronRight size={14} />
             </Link>
           </div>
@@ -616,19 +631,15 @@ export const DashboardPage: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricCard
               label="Applications"
-              value={portfolioMetrics ? portfolioMetrics.totalApplications.toString() : assessments.length.toString()}
-              subtext="Portfolio intake in database"
+              value={assessments.length.toString()}
+              subtext="Authorized portfolio intake"
               trend={{ value: "Live Count", isNeutral: true }}
               icon={FileText}
               onClick={() => navigate('/assessments')}
             />
             <MetricCard
               label="Require Attention"
-              value={
-                portfolioMetrics
-                  ? portfolioMetrics.requireAttention.toString()
-                  : assessments.filter(a => a.status === 'Under Review' || a.status === 'Information Requested' || a.riskLevel === 'HIGH').length.toString()
-              }
+              value={assessments.filter(a => a.status !== 'Approved' || a.riskLevel === 'HIGH').length.toString()}
               subtext="Prioritized underwriting queues"
               trend={{ value: "Action required", isPositive: false }}
               icon={AlertCircle}
@@ -649,11 +660,7 @@ export const DashboardPage: React.FC = () => {
             />
             <MetricCard
               label="Information Gaps"
-              value={
-                portfolioMetrics
-                  ? portfolioMetrics.informationGaps.toString()
-                  : assessments.reduce((sum, a) => sum + (a.informationGaps?.filter(g => g.status !== 'Resolved').length || 0), 0).toString()
-              }
+              value={assessments.reduce((sum, a) => sum + (a.informationGapsCount ?? (a.informationGaps?.filter(g => g.status !== 'Resolved').length || 0)), 0).toString()}
               subtext="Pending veterinary clarifications"
               trend={{ value: "Awaiting clinic", isNeutral: true }}
               icon={FileQuestion}

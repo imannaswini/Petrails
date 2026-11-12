@@ -3,12 +3,22 @@ import { Link } from 'react-router-dom';
 import { Assessment } from '../../types';
 import { RiskBadge } from './RiskBadge';
 import { AlertCircle, ArrowRight, Clock, Scale, Cpu } from 'lucide-react';
+import {
+  formatExactLocalDateTime,
+  formatRelativeOrLocalTimestamp,
+  useRelativeTimeTick
+} from '../../utils/dateTime';
 
 interface AssessmentCardProps {
   assessment: Assessment;
 }
 
 export const AssessmentCard: React.FC<AssessmentCardProps> = ({ assessment }) => {
+  const nowMs = useRelativeTimeTick(30000);
+  const rawTimestamp = assessment.updatedAt || assessment.createdAt || assessment.lastUpdated;
+  const formattedTime = formatRelativeOrLocalTimestamp(rawTimestamp, nowMs);
+  const exactTimeTitle = formatExactLocalDateTime(rawTimestamp);
+
   return (
     <div className="group rounded-xl overflow-hidden bg-surface border border-surface-border hover:border-surface-borderLight transition-all duration-300 hover:-translate-y-1 hover:shadow-cinematic flex flex-col justify-between">
       <div>
@@ -22,10 +32,25 @@ export const AssessmentCard: React.FC<AssessmentCardProps> = ({ assessment }) =>
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-black/30" />
 
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-            <span className="font-mono text-[10px] tracking-wider px-2 py-0.5 rounded bg-background/80 backdrop-blur-md text-petText-secondary border border-surface-border">
-              {assessment.policyId}
-            </span>
+          <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[10px] tracking-wider px-2 py-0.5 rounded bg-background/80 backdrop-blur-md text-petText-secondary border border-surface-border">
+                {assessment.policyId}
+              </span>
+              <span
+                className={`font-mono text-[10px] px-2 py-0.5 rounded backdrop-blur-md border ${
+                  assessment.status === 'Approved'
+                    ? 'bg-emerald-950/75 text-emerald-300 border-emerald-800/50'
+                    : assessment.status === 'Under Review'
+                    ? 'bg-amber-950/75 text-amber-300 border-amber-800/50'
+                    : assessment.status === 'Information Requested'
+                    ? 'bg-sky-950/75 text-sky-300 border-sky-800/50'
+                    : 'bg-rose-950/75 text-rose-300 border-rose-800/50'
+                }`}
+              >
+                {assessment.status}
+              </span>
+            </div>
             <RiskBadge level={assessment.riskLevel} size="sm" />
           </div>
 
@@ -79,9 +104,12 @@ export const AssessmentCard: React.FC<AssessmentCardProps> = ({ assessment }) =>
                 <span className="text-emerald-400 text-[11px] font-medium">All Records Verified</span>
               )}
             </div>
-            <span className="text-[11px] font-mono text-petText-muted flex items-center gap-1">
+            <span
+              className="text-[11px] font-mono text-petText-muted flex items-center gap-1"
+              title={exactTimeTitle}
+            >
               <Clock size={11} />
-              {assessment.lastUpdated}
+              {formattedTime}
             </span>
           </div>
         </div>

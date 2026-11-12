@@ -102,3 +102,84 @@ def test_auth_schemas():
     auth_resp = AuthResponse(token="jwt-token-xyz", user=user_resp)
     assert auth_resp.token == "jwt-token-xyz"
     assert auth_resp.user.authorityLimitInr == 500000
+
+def test_unified_insurance_professional_role_and_tiers():
+    """Verify unified Insurance Professional role and tier resolution."""
+    from app.core.security import resolve_authority_limit, AUTHORITY_TIER_LIMITS
+
+    # Default role in schema
+    unified_req = RegisterRequest(
+        organization="Bajaj Allianz",
+        fullName="Karan Mehra",
+        workEmail="karan@bajaj.insure",
+        authorityTier="tier-1"
+    )
+    assert unified_req.role == "Insurance Professional"
+
+    # Tier resolution
+    assert resolve_authority_limit("tier-1") == 150000
+    assert resolve_authority_limit("tier-2") == 500000
+    assert resolve_authority_limit("tier-3") == 1000000
+    assert resolve_authority_limit("tier-4") == 2500000
+
+    # Role guard accepts Insurance Professional universally
+    guard = require_roles(["Underwriter"])
+    token = {"sub": "usr-ip-1", "role": "Insurance Professional"}
+    res = guard(token)
+    assert res["role"] == "Insurance Professional"
+
+def test_registration_flow_success_and_duplicate():
+    """Verify registration endpoint success, password hashing, and duplicate email prevention."""
+    from app.api.routes_auth import register, TEST_USERS_STORE
+    from app.core.security import verify_password, decode_access_token
+    from pydantic import ValidationError
+
+    def run_sync(coro):
+        try:
+            coro.send(None)
+        except StopIteration as e:
+            return e.value
+
+    unique_email = f"officer-{id(register)}@digit.insure"
+    req = RegisterRequest(
+        organization="Digit General Insurance",
+        fullName="Pooja Sharma",
+        workEmail=unique_email,
+        authorityTier="tier-2",
+        password="SecurePass@2026"
+    )
+
+    # 1. Successful registration
+    auth_resp = run_sync(register(req))
+    assert auth_resp.token is not None
+    assert auth_resp.user.email == unique_email
+    assert auth_resp.user.fullName == "Pooja Sharma"
+    assert auth_resp.user.role == "Insurance Professional"
+    assert auth_resp.user.authorityTier == "tier-2"
+    assert auth_resp.user.authorityLimitInr == 500000
+
+    # Token payload verification
+    decoded = decode_access_token(auth_resp.token)
+    assert decoded["email"] == unique_email
+    assert decoded["authorityTier"] == "tier-2"
+    assert decoded["authorityLimitInr"] == 500000
+
+    # Password is encrypted and not leaked in response
+    assert not hasattr(auth_resp.user, "password")
+    assert not hasattr(auth_resp.user, "hashedPassword")
+    stored_doc = TEST_USERS_STORE[unique_email]
+    assert verify_password("SecurePass@2026", stored_doc["hashedPassword"])
+
+    # 2. Duplicate registration attempt -> HTTP 400
+    with pytest.raises(HTTPException) as exc_info:
+        run_sync(register(req))
+    assert exc_info.value.status_code == 400
+    assert "already registered" in exc_info.value.detail.lower()
+
+    # 3. Schema validation error on missing required field
+    with pytest.raises(ValidationError):
+        RegisterRequest(
+            organization="Digit",
+            fullName="Missing Email"
+            # workEmail omitted
+        )

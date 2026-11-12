@@ -15,9 +15,10 @@ export const ProfilePage: React.FC = () => {
   );
 
   const fullName = currentUser?.fullName || 'Sarah Jenkins';
-  const roleName = currentUser?.role || 'Senior Underwriter (Level 4)';
+  const roleName = currentUser?.role || 'Insurance Professional';
   const orgName = currentUser?.organization || 'Tata AIG General Insurance';
   const authorityLimit = currentUser?.authorityLimitInr || 500000;
+  const authorityTier = currentUser?.authorityTier || (authorityLimit >= 2500000 ? 'tier-4' : authorityLimit >= 1000000 ? 'tier-3' : authorityLimit >= 500000 ? 'tier-2' : 'tier-1');
   const initials = fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
   return (
@@ -33,8 +34,11 @@ export const ProfilePage: React.FC = () => {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               {fullName}
             </h1>
-            <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-teal-950/60 text-brand-teal border border-teal-800/40 self-center sm:self-auto">
+            <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-teal-950/60 text-brand-teal border border-teal-800/40 self-center sm:self-auto font-semibold">
               {roleName}
+            </span>
+            <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-surface-elevated text-petText-secondary border border-surface-border self-center sm:self-auto">
+              {authorityTier.toUpperCase()} Permission Level
             </span>
           </div>
 

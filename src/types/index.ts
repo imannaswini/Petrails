@@ -12,6 +12,8 @@ export interface MedicalRecord {
   clinicName: string;
   veterinarian: string;
   notes?: string;
+  informationStatus?: 'DECLARED' | 'VERIFIED' | 'UNKNOWN';
+  evidenceReference?: string;
 }
 
 export interface VaccinationRecord {
@@ -21,6 +23,8 @@ export interface VaccinationRecord {
   nextDueDate: string;
   batchNumber: string;
   status: 'Up to Date' | 'Due Soon' | 'Overdue';
+  informationStatus?: 'DECLARED' | 'VERIFIED' | 'UNKNOWN';
+  evidenceReference?: string;
 }
 
 export interface MedicationRecord {
@@ -89,6 +93,7 @@ export interface Pet {
   surgeries: SurgeryRecord[];
   policies: PolicySummary[];
   claims: ClaimSummary[];
+  declaredMedicalInformation?: Record<string, string>;
 }
 
 export interface ShapFactor {
@@ -97,7 +102,17 @@ export interface ShapFactor {
   impact: number; // e.g. +14, -4
   category: 'Medical History' | 'Age & Breed' | 'Vaccination' | 'Claims History' | 'Geography';
   explanation: string;
-  confidence: number;
+  confidence?: number | null;
+  featureName?: string;
+  featureValue?: unknown;
+}
+
+export interface RuleAnalysis {
+  rule: string;
+  impact: number;
+  reason: string;
+  condition?: string;
+  inputValue?: unknown;
 }
 
 export interface InformationGap {
@@ -131,6 +146,55 @@ export interface UnderwriterDecision {
   lastModifiedAt?: string;
 }
 
+export interface ExtractedMedicalFields {
+  petName?: string | null;
+  clinicName?: string | null;
+  veterinarian?: string | null;
+  documentDate?: string | null;
+  preExistingConditions?: string | null;
+  previousIllnesses?: string | null;
+  previousSurgeries?: string | null;
+  currentMedications?: string | null;
+  vaccinationDeclaration?: string | null;
+  allergies?: string | null;
+  previousClaims?: string | null;
+}
+
+export interface DocumentComparisonItem {
+  field: string;
+  label: string;
+  declaredValue?: string | null;
+  extractedValue?: string | null;
+  status: 'MATCH' | 'DISCREPANCY' | 'MISSING_IN_DECLARATION' | 'MISSING_IN_DOCUMENT' | 'NOT_PRESENT';
+  note: string;
+}
+
+export interface UploadedDocumentRecord {
+  id: string;
+  fileName: string;
+  contentType: string;
+  fileSizeBytes: number;
+  uploadedAt: string;
+  uploadedBy: string;
+  extractionMethod: 'PDF_TEXT' | 'PDF_OCR' | 'IMAGE_OCR' | 'NO_TEXT_EXTRACTED';
+  extractionEngine: string;
+  extractedTextPreview: string;
+  extractedFields: ExtractedMedicalFields;
+  comparisons: DocumentComparisonItem[];
+  summary: {
+    matchesCount: number;
+    discrepanciesCount: number;
+    missingInDeclarationCount: number;
+    missingInDocumentCount: number;
+  };
+  verificationStatus: 'EXTRACTED_UNVERIFIED' | 'ACCEPTED_UNVERIFIED' | 'UNDERWRITER_VERIFIED';
+  reviewStatus: 'PENDING_REVIEW' | 'ACCEPTED' | 'DISMISSED';
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  acceptedFields?: string[];
+  reviewNotes?: string | null;
+}
+
 export interface Assessment {
   id: string;
   petId: string;
@@ -138,6 +202,8 @@ export interface Assessment {
   breed: string;
   species: Species;
   ageText: string;
+  ageYears?: number;
+  weightKg?: number;
   sex: string;
   policyId: string;
   riskLevel: RiskLevel;
@@ -145,16 +211,70 @@ export interface Assessment {
   ruleScore: number;
   mlScore: number;
   modelConfidence: number; // e.g. 91%
-  calibrationBand: string; // e.g. 'Calibrated ±3.2%'
+  calibrationBand?: string;
   informationGapsCount: number;
   informationGaps: InformationGap[];
   contributingFactors: ShapFactor[];
-  status: 'Under Review' | 'Approved' | 'Information Requested' | 'Referred' | 'Attention Required';
-  lastUpdated: string;
+  ruleAnalysis?: RuleAnalysis[];
+  inferenceMode?: 'TRAINED_MODEL' | 'FALLBACK' | 'UNAVAILABLE';
+  modelVersion?: string | null;
+  shapBaseValue?: number | null;
+  modelAvailable?: boolean;
+  dataCompleteness?: number | null;
+  inferenceUnknownInputs?: string[];
+  underwritingData?: Record<string, unknown>;
+  status: 'Draft' | 'Under Review' | 'Approved' | 'Rejected' | 'Information Requested' | 'Referred' | 'Attention Required' | 'Archived';
+  lastUpdated?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdByUserId?: string;
+  createdByEmail?: string;
+  createdByName?: string;
   underwriterDecision?: UnderwriterDecision;
   decisionHistory?: DecisionHistoryEntry[];
+  uploadedDocuments?: UploadedDocumentRecord[];
   imageUrl: string;
 }
+
+export interface UpdateAssessmentPayload {
+  petName?: string;
+  species?: Species;
+  breed?: string;
+  ageYears?: number;
+  ageText?: string;
+  sex?: string;
+  weightKg?: number;
+  preExistingConditions?: string;
+  previousIllnesses?: string;
+  previousSurgeries?: string;
+  allergies?: string;
+  currentMedications?: string;
+  vaccinationDeclaration?: string;
+  previousClaims?: string;
+  medicalHistory?: MedicalRecord[];
+  vaccinations?: VaccinationRecord[];
+  medications?: MedicationRecord[];
+  surgeries?: SurgeryRecord[];
+  claims?: ClaimSummary[];
+  coverageTier?: string;
+  coverageLimitInr?: number;
+  deductibleInr?: number;
+  copayPercent?: number;
+  previousInsurance?: string;
+  reopenForReassessment?: boolean;
+  editReason?: string;
+}
+
+export type CreateAssessmentPayload = Omit<
+  Assessment,
+  | 'id' | 'lastUpdated' | 'createdAt' | 'updatedAt'
+  | 'riskLevel' | 'combinedScore' | 'ruleScore' | 'mlScore' | 'modelConfidence'
+  | 'calibrationBand' | 'contributingFactors' | 'ruleAnalysis' | 'inferenceMode'
+  | 'modelVersion' | 'shapBaseValue' | 'modelAvailable' | 'dataCompleteness' | 'inferenceUnknownInputs'
+> & {
+  id?: string;
+  lastUpdated?: string;
+};
 
 export interface AnomalyIndicator {
   name: string;

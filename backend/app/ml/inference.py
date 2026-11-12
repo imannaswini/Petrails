@@ -42,7 +42,7 @@ def parse_pet_age(feature_vector: Dict[str, Any]) -> float:
       - Month unit conversion ('6 months' -> 0.5)
       - Documented fallback to DEFAULT_FALLBACK_AGE (2.0) with warning
     """
-    raw_val = feature_vector.get("age")
+    raw_val = feature_vector.get("ageYears", feature_vector.get("age"))
     if raw_val is None:
         raw_val = feature_vector.get("ageText")
 
@@ -86,6 +86,7 @@ class MLInferenceEngine:
     def __init__(self):
         self.underwriting_artifact: Optional[Dict[str, Any]] = None
         self.claims_artifact: Optional[Dict[str, Any]] = None
+        self.last_inference_metadata: Dict[str, Any] = {"mode": "UNAVAILABLE", "version": None, "base_value": None}
         self.load_models()
 
     def load_models(self):
@@ -127,25 +128,46 @@ class MLInferenceEngine:
         }
         is_high_risk = 1.0 if any(b in breed for b in high_risk_breeds) else 0.0
         
-        weight = float(feature_vector.get("weightKg", 20.0 if is_canine else 4.5))
+        raw_weight = feature_vector.get("weightKg")
+        weight = float(raw_weight if raw_weight is not None else (20.0 if is_canine else 4.5))
         medical_history = feature_vector.get("medicalHistory", [])
-        med_count = float(len(medical_history))
+        verified_history = [m for m in medical_history if isinstance(m, dict) and m.get("informationStatus") == "VERIFIED"]
+        med_count = float(len(verified_history))
         
         vaccinations = feature_vector.get("vaccinations", [])
-        vacc_compliant = 1.0 if (not vaccinations or any(v.get("status") == "Up to Date" for v in vaccinations if isinstance(v, dict))) else 0.0
+        verified_vaccinations = [v for v in vaccinations if isinstance(v, dict) and v.get("informationStatus") == "VERIFIED"]
+        vaccination_known = bool(verified_vaccinations)
+        vacc_compliant = 1.0 if vaccination_known and any(v.get("status") == "Up to Date" for v in verified_vaccinations) else 0.0
+        medical_known = bool(verified_history) or feature_vector.get("medicalInformationKnown") is True
 
         # Construct DataFrame with exactly the 6 independent clinical features
         cols = ["age", "is_canine", "is_high_risk_breed", "weight_kg", "medical_history_count", "vaccination_compliant"]
         X_df = pd.DataFrame([[age, is_canine, is_high_risk, weight, med_count, vacc_compliant]], columns=cols)
 
         # Fallback if artifact is not loaded
-        if not self.underwriting_artifact or "model" not in self.underwriting_artifact:
+        if not self.underwriting_artifact or "model" not in self.underwriting_artifact or not vaccination_known or not medical_known:
+            self.last_inference_metadata = {
+                "mode": "FALLBACK",
+                "version": (self.underwriting_artifact or {}).get("version"),
+                "base_value": None,
+                "model_available": bool(self.underwriting_artifact and "model" in self.underwriting_artifact)
+            }
+            unknown = []
+            if not vaccination_known: unknown.append("vaccination_compliance")
+            if not medical_known: unknown.append("medical_history_count")
+            self.last_inference_metadata["unknown_inputs"] = unknown
             ml_score = int(round(35 + (age * 3.2) + (is_high_risk * 10) + (med_count * 4.0) - (vacc_compliant * 4.0)))
             ml_score = max(12, min(92, ml_score))
-            return ml_score, 0.90, []
+            return ml_score, 0.0, []
 
         model = self.underwriting_artifact["model"]
         explainer = self.underwriting_artifact["explainer"]
+        self.last_inference_metadata = {
+            "mode": "TRAINED_MODEL",
+            "version": self.underwriting_artifact.get("version"),
+            "base_value": self.underwriting_artifact.get("base_value"),
+            "model_available": True
+        }
 
         # Real ML prediction
         raw_pred = model.predict(X_df)[0]
@@ -164,7 +186,7 @@ class MLInferenceEngine:
             impact=age_shap,
             category="Age & Breed",
             explanation=f"Age factor delta of {age_shap:+.1f} points evaluated by Random Forest against canine life-stage cohort.",
-            confidence=0.93
+            featureName="age", featureValue=age
         ))
 
         # 1. Species attribution
@@ -175,7 +197,7 @@ class MLInferenceEngine:
             impact=species_shap,
             category="Age & Breed",
             explanation=f"Species actuarial loss profile delta contributes {species_shap:+.1f} points.",
-            confidence=0.92
+            featureName="is_canine", featureValue=is_canine
         ))
 
         # 2. Breed attribution
@@ -186,7 +208,17 @@ class MLInferenceEngine:
             impact=breed_shap,
             category="Age & Breed",
             explanation=f"Actuarial baseline exhibits statistical {'elevated' if breed_shap > 0 else 'favorable'} susceptibility for {feature_vector.get('breed', 'this breed')}.",
-            confidence=0.91
+            featureName="is_high_risk_breed", featureValue=is_high_risk
+        ))
+
+        weight_shap = float(round(shap_values[3], 1))
+        shap_factors.append(ShapFactorSchema(
+            id="shap-weight",
+            name="Weight (kg)",
+            impact=weight_shap,
+            category="Age & Breed",
+            explanation=f"Weight input of {weight:.1f} kg contributed {weight_shap:+.1f} points to the model output.",
+            featureName="weight_kg", featureValue=weight
         ))
 
         # 3. Medical History attribution
@@ -197,7 +229,7 @@ class MLInferenceEngine:
             impact=med_shap,
             category="Medical History",
             explanation=f"{int(med_count)} declared clinical episode{'s' if med_count != 1 else ''} shifted prospective loss model by {med_shap:+.1f} points.",
-            confidence=0.95
+            featureName="medical_history_count", featureValue=med_count
         ))
 
         # 4. Preventative Compliance attribution
@@ -208,10 +240,11 @@ class MLInferenceEngine:
             impact=vacc_shap,
             category="Vaccination",
             explanation=f"Immunization compliance records provide {vacc_shap:+.1f} risk adjustment.",
-            confidence=0.94
+            featureName="vaccination_compliant", featureValue=vacc_compliant
         ))
 
-        confidence = 0.94
+        # This model does not estimate calibrated per-prediction confidence.
+        confidence = 0.0
         return ml_score, confidence, shap_factors
 
     def predict_claims_anomaly(self, claim_data: Dict[str, Any]) -> Tuple[int, str, List[AnomalyIndicatorSchema]]:

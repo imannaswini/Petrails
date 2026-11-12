@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, CheckCircle2, FileText, AlertCircle, Eye, ShieldCheck, Scale } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileText, AlertCircle, Eye, ShieldCheck, Scale, AlertTriangle } from 'lucide-react';
 import { EvidenceItem } from '../types';
 
 export const ClaimDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { claims, recordClaimDecision, openEvidenceModal } = useApp();
+  const { claims, recordClaimDecision, openEvidenceModal, currentUser } = useApp();
 
   const claim = claims.find(c => c.id === id) || (claims.length > 0 ? claims[0] : null);
+
+  const userLimit = currentUser?.authorityLimitInr || 500000;
+  const userTier = currentUser?.authorityTier || 'tier-3';
 
   const [decisionNotes, setDecisionNotes] = useState(claim?.adjusterDecision?.notes || '');
   const [selectedAction, setSelectedAction] = useState<
@@ -21,6 +24,11 @@ export const ClaimDetailPage: React.FC = () => {
   );
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const payoutVal = (selectedAction === 'Approved' || selectedAction === 'Adjusted')
+    ? (parseFloat(approvedAmount) || (claim ? claim.amountInr : 0))
+    : 0;
+  const isExceedingAuthority = payoutVal > userLimit;
 
   if (!claim) {
     return (
@@ -40,6 +48,14 @@ export const ClaimDetailPage: React.FC = () => {
   const handleCommitDecision = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionError(null);
+
+    if ((selectedAction === 'Approved' || selectedAction === 'Adjusted') && isExceedingAuthority) {
+      setActionError(
+        `Settlement payout of ₹${payoutVal.toLocaleString('en-IN')} exceeds your ${userTier.toUpperCase()} discretionary authority cap of ₹${userLimit.toLocaleString('en-IN')}. Please select 'Refer to Committee' to escalate.`
+      );
+      return;
+    }
+
     try {
       await recordClaimDecision(
         claim.id,
@@ -341,12 +357,33 @@ export const ClaimDetailPage: React.FC = () => {
       <section className="p-6 rounded-2xl bg-surface border border-surface-border space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-surface-border">
           <div>
-            <h3 className="text-base font-bold text-white">Claims Adjuster Adjudication Determination</h3>
+            <h3 className="text-base font-bold text-white">Insurance Professional Adjudication Determination</h3>
             <p className="text-xs text-petText-secondary mt-0.5">
               Authorized insurance decision recorded directly into the Guidewire Claims Center ledger.
             </p>
           </div>
+          <div className="text-right">
+            <span className="font-mono text-xs px-2.5 py-1 rounded bg-teal-950/60 text-brand-teal border border-teal-800/40">
+              {userTier.toUpperCase()} Limit: ₹{userLimit.toLocaleString('en-IN')}
+            </span>
+          </div>
         </div>
+
+        {isExceedingAuthority && (selectedAction === 'Approved' || selectedAction === 'Adjusted') && (
+          <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-800/60 text-amber-300 text-xs flex items-center gap-2">
+            <AlertTriangle size={15} className="shrink-0 text-amber-400" />
+            <span>
+              <strong>Authority Limit Exceeded:</strong> Payout amount (₹{payoutVal.toLocaleString('en-IN')}) exceeds your {userTier.toUpperCase()} approval ceiling of ₹{userLimit.toLocaleString('en-IN')}. Please select <strong>Refer to Committee</strong> to escalate.
+            </span>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+            <AlertCircle size={15} className="shrink-0 text-rose-400" />
+            <span>{actionError}</span>
+          </div>
+        )}
 
         {showSavedToast && (
           <div className="p-3 rounded-lg bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in duration-200">
@@ -396,7 +433,7 @@ export const ClaimDetailPage: React.FC = () => {
           {/* Adjuster notes */}
           <div>
             <label className="block text-petText-secondary font-medium mb-1">
-              Adjuster Claim Justification Notes
+              Insurance Professional Claim Justification Notes
             </label>
             <textarea
               rows={3}
@@ -409,11 +446,12 @@ export const ClaimDetailPage: React.FC = () => {
 
           <div className="flex items-center justify-between pt-2">
             <span className="text-[11px] text-petText-dim">
-              Signed by: <strong>Sarah Jenkins (Claims &amp; Underwriting Officer)</strong>
+              Signed by: <strong>{currentUser?.fullName || 'Sarah Jenkins'} · Insurance Professional ({userTier.toUpperCase()})</strong>
             </span>
             <button
               type="submit"
-              className="px-6 py-2 rounded-lg bg-brand-teal hover:bg-teal-400 text-background font-bold text-xs transition-colors"
+              disabled={isExceedingAuthority && (selectedAction === 'Approved' || selectedAction === 'Adjusted')}
+              className="px-6 py-2 rounded-lg bg-brand-teal hover:bg-teal-400 text-background font-bold text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Commit Claim Determination
             </button>

@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from typing import Optional, Dict, Any
-from pymongo import AsyncMongoClient, ASCENDING
+from pymongo import AsyncMongoClient, ASCENDING, DESCENDING
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.asynchronous.collection import AsyncCollection
 from app.core.config import settings
@@ -109,6 +109,11 @@ async def init_indexes():
         await db.assessments.create_index([("id", ASCENDING)], unique=True)
         await db.assessments.create_index([("petId", ASCENDING)])
         await db.assessments.create_index([("status", ASCENDING)])
+        await db.assessments.create_index([("createdByUserId", ASCENDING)])
+        await db.assessments.create_index([("createdByEmail", ASCENDING)])
+        await db.assessments.create_index([("updatedAt", DESCENDING)])
+        await db.assessments.create_index([("isDemoSeed", ASCENDING)])
+        await db.assessments.create_index([("isDeleted", ASCENDING)])
         
         # Claims collection
         await db.claims.create_index([("id", ASCENDING)], unique=True)

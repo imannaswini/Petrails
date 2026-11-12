@@ -1,9 +1,10 @@
 import time
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Depends, status
 from app.core.database import get_claims_collection, db_instance
 from app.core.config import settings
+from app.core.security import get_optional_user_payload
 from app.schemas.claim import ClaimSchema, ClaimDecisionPayload
 from app.services.intelligence_service import claims_anomaly_engine
 from app.services.audit_service import log_audit_trail
@@ -80,8 +81,12 @@ async def create_claim(payload: ClaimSchema):
     return clean_doc(dict(saved))
 
 @router.post("/{claim_id}/decision")
-async def record_claim_decision(claim_id: str, payload: ClaimDecisionPayload):
-    """Record a claims adjuster decision and persist to audit trail."""
+async def record_claim_decision(
+    claim_id: str,
+    payload: ClaimDecisionPayload,
+    token_payload: Optional[Dict[str, Any]] = Depends(get_optional_user_payload)
+):
+    """Record an insurance professional decision and enforce authority tier limits."""
     claim: Optional[Dict[str, Any]] = None
     if settings.TESTING or not db_instance.is_connected:
         claim = TEST_CLAIMS_STORE.get(claim_id)
@@ -95,17 +100,31 @@ async def record_claim_decision(claim_id: str, payload: ClaimDecisionPayload):
             detail=f"Claim '{claim_id}' not found."
         )
 
-    actor_name = payload.decidedBy or "Sarah Jenkins (Senior Underwriting & Claims Officer)"
+    actor_name = payload.decidedBy or "Sarah Jenkins (Insurance Professional)"
     timestamp_str = time.strftime("%Y-%m-%d %H:%M IST")
 
     approved_amount = payload.approvedAmountInr
     if approved_amount is None:
         approved_amount = round(claim.get("amountInr", 0) * 0.9, 2) if "Approve" in payload.status else 0.0
 
+    # Authority tier limit enforcement
+    user_limit = 500000
+    if isinstance(token_payload, dict) and token_payload.get("authorityLimitInr"):
+        user_limit = int(token_payload["authorityLimitInr"])
+
+    if payload.status in ["Approved", "Adjusted"] and approved_amount > user_limit:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Approved payout of ₹{approved_amount:,.2f} exceeds your discretionary authority "
+                f"tier limit of ₹{user_limit:,.2f}. Please refer this claim for committee / senior review."
+            )
+        )
+
     decision_entry = {
         "status": payload.status,
         "approvedAmountInr": approved_amount,
-        "notes": payload.notes or f"Adjuster status: {payload.status}",
+        "notes": payload.notes or f"Determination recorded: {payload.status}",
         "decidedBy": actor_name,
         "timestamp": timestamp_str
     }
@@ -137,7 +156,7 @@ async def record_claim_decision(claim_id: str, payload: ClaimDecisionPayload):
         entity_id=claim_id,
         action=f"Claim Adjuster Decision: {payload.status}",
         actor_name=actor_name,
-        actor_role="Claims Adjuster",
+        actor_role="Insurance Professional",
         details={
             "status": payload.status,
             "approvedAmountInr": approved_amount,

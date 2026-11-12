@@ -52,7 +52,10 @@ class ActuarialUnderwritingRuleEngine(IUnderwritingRuleEngine):
         base_score = 40
         triggered = []
 
-        age = pet_data.get("age", 2)
+        raw_age = pet_data.get("ageYears")
+        if raw_age is None:
+            raw_age = pet_data.get("age")
+        age = float(raw_age if raw_age is not None else 2)
         breed = pet_data.get("breed", "Mixed")
         species = pet_data.get("species", "Dog")
         medical_history = pet_data.get("medicalHistory", [])
@@ -60,22 +63,22 @@ class ActuarialUnderwritingRuleEngine(IUnderwritingRuleEngine):
         # Age transitions
         if age >= 7:
             base_score += 15
-            triggered.append({"rule": "RULE-AGE-SENIOR", "impact": 15, "reason": "Senior life-stage hazard"})
+            triggered.append({"rule": "RULE-AGE-SENIOR", "impact": 15, "reason": "Senior life-stage hazard", "condition": "age >= 7 years", "inputValue": age})
         elif age >= 4:
             base_score += 8
-            triggered.append({"rule": "RULE-AGE-ADULT", "impact": 8, "reason": "Mature adult transition"})
+            triggered.append({"rule": "RULE-AGE-ADULT", "impact": 8, "reason": "Mature adult transition", "condition": "age >= 4 years", "inputValue": age})
 
         # High susceptibility breeds
         high_risk_canine = ["Golden Retriever", "German Shepherd", "French Bulldog", "Bulldog", "Rottweiler"]
         if species == "Dog" and breed in high_risk_canine:
             base_score += 12
-            triggered.append({"rule": "RULE-BREED-PREDISPOSITION", "impact": 12, "reason": f"High actuarial risk profile for {breed}"})
+            triggered.append({"rule": "RULE-BREED-PREDISPOSITION", "impact": 12, "reason": f"High actuarial risk profile for {breed}", "condition": "species is Dog and breed is in configured breed list", "inputValue": breed})
 
         # Declared clinical events
         if medical_history:
             history_penalty = min(len(medical_history) * 6, 24)
             base_score += history_penalty
-            triggered.append({"rule": "RULE-CLINICAL-HISTORY", "impact": history_penalty, "reason": f"{len(medical_history)} prior medical events declared"})
+            triggered.append({"rule": "RULE-CLINICAL-HISTORY", "impact": history_penalty, "reason": f"{len(medical_history)} prior medical events declared", "condition": "medical history record count > 0", "inputValue": len(medical_history)})
 
         final_score = max(10, min(95, base_score))
         return final_score, triggered
@@ -86,7 +89,13 @@ class PredictiveRiskModel(IPredictiveRiskModel):
     Executes trained scikit-learn RandomForestRegressor model and SHAP TreeExplainer.
     """
     def predict_risk(self, feature_vector: Dict[str, Any]) -> Tuple[int, float, List[ShapFactorSchema]]:
-        return ml_engine.predict_underwriting_risk(feature_vector)
+        result = ml_engine.predict_underwriting_risk(feature_vector)
+        self.last_inference_mode = ml_engine.last_inference_metadata.get("mode", "UNAVAILABLE")
+        self.last_model_version = ml_engine.last_inference_metadata.get("version")
+        self.last_shap_base_value = ml_engine.last_inference_metadata.get("base_value")
+        self.last_unknown_inputs = ml_engine.last_inference_metadata.get("unknown_inputs", [])
+        self.last_model_available = ml_engine.last_inference_metadata.get("model_available", False)
+        return result
 
 class ClaimsAnomalyEngine(IClaimsAnomalyEngine):
     """

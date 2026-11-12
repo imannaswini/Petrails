@@ -3,7 +3,7 @@ import { X, Send, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const RequestInfoModal: React.FC = () => {
-  const { requestInfoModal, closeRequestInfoModal, recordUnderwriterDecision } = useApp();
+  const { requestInfoModal, closeRequestInfoModal, requestAssessmentInformation } = useApp();
   const [recipient, setRecipient] = useState<'clinic' | 'owner' | 'both'>('clinic');
   const [urgency, setUrgency] = useState<'Standard (48h)' | 'Urgent (24h)'>('Standard (48h)');
   const [customQuestions, setCustomQuestions] = useState(
@@ -13,22 +13,28 @@ export const RequestInfoModal: React.FC = () => {
 
   if (!requestInfoModal.isOpen) return null;
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => {
-      if (requestInfoModal.assessmentId) {
-        recordUnderwriterDecision(
-          requestInfoModal.assessmentId,
-          'Request Information',
-          `Dispatched clinical questionnaire to ${recipient}: ${requestInfoModal.gapTitle || 'General Information Request'}`
-        );
-      }
+    if (!requestInfoModal.assessmentId) return;
+    const questions = customQuestions
+      .split('\n')
+      .map(q => q.trim())
+      .filter(Boolean);
+    try {
+      await requestAssessmentInformation(requestInfoModal.assessmentId, {
+        gapTitle: requestInfoModal.gapTitle,
+        recipient,
+        urgency,
+        questions
+      });
+      setSubmitted(true);
       setTimeout(() => {
         setSubmitted(false);
         closeRequestInfoModal();
-      }, 1000);
-    }, 600);
+      }, 900);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to dispatch clinical information request.');
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, ArrowRight, Lock, Mail, User, Building2, Award, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Shield, ArrowRight, Lock, Mail, User, Building2, Award, CheckCircle2, AlertTriangle, Briefcase } from 'lucide-react';
 import { PET_IMAGES } from '../data/mockData';
 import { authService } from '../services/authService';
 import { useApp } from '../context/AppContext';
@@ -9,11 +9,11 @@ export const SignUpPage: React.FC = () => {
   const navigate = useNavigate();
   const { refreshData } = useApp();
   const [formData, setFormData] = useState({
-    organization: 'Tata AIG General Insurance',
-    fullName: 'Sarah Jenkins',
-    workEmail: 'sarah.jenkins@petrails.insure',
-    role: 'Senior Underwriting Officer',
-    authorityTier: 'Tier 3 (₹5,00,000 Discretionary Cap)',
+    organization: '',
+    fullName: '',
+    workEmail: '',
+    role: 'Insurance Professional',
+    authorityTier: 'tier-2',
     password: '',
     agreeTerms: true
   });
@@ -30,10 +30,8 @@ export const SignUpPage: React.FC = () => {
         organization: formData.organization,
         fullName: formData.fullName,
         workEmail: formData.workEmail,
-        role: formData.role,
-        authorityTier: formData.authorityTier.includes('Tier 1') ? 'tier-1'
-          : formData.authorityTier.includes('Tier 3') ? 'tier-3'
-            : formData.authorityTier.includes('Tier 4') ? 'tier-4' : 'tier-2',
+        role: 'Insurance Professional',
+        authorityTier: formData.authorityTier,
         password: formData.password
       });
       setIsSuccess(true);
@@ -188,21 +186,23 @@ export const SignUpPage: React.FC = () => {
                       <label className="block text-petText-secondary font-medium mb-1">
                         Professional Role
                       </label>
-                      <select
-                        value={formData.role}
-                        onChange={e => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full px-3 py-2 rounded-xl bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal"
-                      >
-                        <option>Senior Underwriting Officer</option>
-                        <option>Claims Adjuster / Investigator</option>
-                        <option>Veterinary Medical Officer</option>
-                        <option>Risk &amp; Actuarial Analyst</option>
-                      </select>
+                      <div className="relative">
+                        <Briefcase size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-teal" />
+                        <input
+                          type="text"
+                          value="Insurance Professional"
+                          readOnly
+                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-elevated/80 border border-brand-teal/40 text-brand-teal font-semibold text-xs cursor-default select-none shadow-sm"
+                        />
+                      </div>
+                      <span className="text-[10px] text-petText-dim mt-1 block">
+                        Unified role across Underwriting, Claims &amp; Analytics
+                      </span>
                     </div>
 
                     <div>
                       <label className="block text-petText-secondary font-medium mb-1">
-                        Authority Limit Cap
+                        Authority Limit Cap (Permission Level)
                       </label>
                       <div className="relative">
                         <Award size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-petText-muted" />
@@ -211,12 +211,15 @@ export const SignUpPage: React.FC = () => {
                           onChange={e => setFormData({ ...formData, authorityTier: e.target.value })}
                           className="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal"
                         >
-                          <option>Tier 1 (₹1,50,000 Limit)</option>
-                          <option>Tier 2 (₹3,00,000 Limit)</option>
-                          <option>Tier 3 (₹5,00,000 Discretionary Cap)</option>
-                          <option>Tier 4 (Unlimited CMO Referral)</option>
+                          <option value="tier-1">Tier 1 (₹1,50,000 Discretionary Limit)</option>
+                          <option value="tier-2">Tier 2 (₹5,00,000 Standard Limit)</option>
+                          <option value="tier-3">Tier 3 (₹10,00,000 Senior Limit)</option>
+                          <option value="tier-4">Tier 4 (₹25,00,000 Executive / Specialist)</option>
                         </select>
                       </div>
+                      <span className="text-[10px] text-petText-dim mt-1 block">
+                        Defines approval ceiling before committee referral
+                      </span>
                     </div>
                   </div>
 

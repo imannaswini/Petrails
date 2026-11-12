@@ -246,7 +246,7 @@ export const Navbar: React.FC = () => {
                     {currentUser?.fullName || 'Sarah Jenkins'}
                   </span>
                   <span className="text-[10px] text-petText-muted leading-tight font-mono">
-                    {currentUser?.role || 'Senior Underwriter'}
+                    {currentUser?.role || 'Insurance Professional'}
                   </span>
                 </div>
                 <ChevronDown size={12} className="text-petText-dim hidden lg:inline" />
@@ -263,7 +263,7 @@ export const Navbar: React.FC = () => {
                       {currentUser?.fullName || 'Sarah Jenkins'}
                     </p>
                     <p className="text-[10px] text-petText-muted font-mono">
-                      {currentUser?.role || 'Senior Underwriting Officer'}
+                      {currentUser?.role || 'Insurance Professional'}
                     </p>
                     <div className="mt-1 text-[10px] font-mono text-brand-teal">
                       Authority: ₹{(currentUser?.authorityLimitInr || 500000).toLocaleString('en-IN')} / claim

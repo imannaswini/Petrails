@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Assessment, RiskLevel } from '../../types';
 import { RiskBadge } from './RiskBadge';
 import { Check, Send, AlertTriangle, UserCheck, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { formatExactLocalDateTime } from '../../utils/dateTime';
 
 interface DecisionPanelProps {
   assessment: Assessment;
@@ -18,10 +19,24 @@ export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedAction(assessment.underwriterDecision?.selectedDecision || null);
+    setNotes(assessment.underwriterDecision?.underwriterNotes || '');
+  }, [assessment.id, assessment.underwriterDecision?.selectedDecision, assessment.underwriterDecision?.underwriterNotes]);
+
+  const userTier = currentUser?.authorityTier || 'tier-3';
+  const userLimit = currentUser?.authorityLimitInr || 500000;
+  const isHighRisk = assessment.riskLevel === 'HIGH';
+  const isRestrictedFromApproval = userTier === 'tier-1' && isHighRisk;
 
   const handleSubmitDecision = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAction) return;
+
+    if (selectedAction === 'Approve' && isRestrictedFromApproval) {
+      setErrorMessage("Tier 1 authority is restricted from approving HIGH risk policies. Please select 'Refer for Review' to escalate.");
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -50,15 +65,15 @@ export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
             <UserCheck size={16} />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-white">Underwriting Authority &amp; Decision</h3>
+            <h3 className="text-base font-semibold text-white">Underwriting Decision</h3>
             <p className="text-xs text-petText-secondary">
-              Statutory human oversight. Binding underwriter decision overrides algorithm recommendations.
+              Authorized underwriter determination. All decisions require justification and are recorded in the activity history.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 bg-surface-elevated px-3 py-1.5 rounded-lg border border-surface-border text-xs">
-          <span className="text-petText-muted">System Recommendation:</span>
+          <span className="text-petText-muted">Risk Classification:</span>
           <RiskBadge level={assessment.riskLevel as RiskLevel} size="sm" />
         </div>
       </div>
@@ -71,28 +86,55 @@ export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
       )}
 
       {/* Decision Form */}
+      {assessment.underwriterDecision?.selectedDecision && <div className="mt-4 p-3 rounded-lg bg-surface-elevated border border-surface-border text-xs">
+        <p className="font-semibold text-white">Current decision: {assessment.underwriterDecision.selectedDecision}</p>
+        <p className="text-petText-secondary mt-1">{assessment.underwriterDecision.underwriterNotes || 'No justification recorded.'}</p>
+        <p className="text-petText-muted mt-1">By {assessment.underwriterDecision.lastModifiedBy || 'Unavailable'} · {formatExactLocalDateTime(assessment.underwriterDecision.lastModifiedAt)}</p>
+      </div>}
       <form onSubmit={handleSubmitDecision} className="mt-5 space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-petText-secondary mb-2">
-            Authorized Underwriter Determination
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-petText-secondary">
+              Authorized Determination (Permission Level: {userTier.toUpperCase()})
+            </label>
+            <span className="text-[11px] font-mono text-brand-teal">
+              Authority Cap: ₹{userLimit.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          {isRestrictedFromApproval && (
+            <div className="mb-3 p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/50 text-amber-300 text-xs flex items-center gap-2">
+              <AlertTriangle size={14} className="shrink-0 text-amber-400" />
+              <span>
+                Tier 1 authority limit restricts independent approval on HIGH risk policies. Referral for review is required.
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Action 1: Approve */}
             <button
               type="button"
+              disabled={isRestrictedFromApproval}
               onClick={() => setSelectedAction('Approve')}
               className={`p-3.5 rounded-xl border text-left transition-all duration-200 flex flex-col justify-between ${
-                selectedAction === 'Approve'
+                isRestrictedFromApproval
+                  ? 'border-surface-border bg-surface-elevated/40 text-petText-dim opacity-50 cursor-not-allowed'
+                  : selectedAction === 'Approve'
                   ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200 shadow-sm ring-1 ring-emerald-500/50'
                   : 'border-surface-border bg-surface-elevated hover:bg-surface-higher text-petText-secondary'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Approve</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Approve {isRestrictedFromApproval && '(Locked)'}
+                </span>
                 <Check size={16} className={selectedAction === 'Approve' ? 'text-emerald-400' : 'text-petText-dim'} />
               </div>
               <span className="text-[11px] text-petText-muted">
-                Bind policy coverage according to selected deductible &amp; tier.
+                {isRestrictedFromApproval
+                  ? 'Exceeds Tier 1 permission for High Risk profile.'
+                  : 'Bind policy coverage within your authority limit.'}
               </span>
             </button>
 
@@ -177,58 +219,20 @@ export const DecisionPanel: React.FC<DecisionPanelProps> = ({ assessment }) => {
             <span>
               Authenticated as{' '}
               <strong>
-                {currentUser?.fullName || 'Sarah Jenkins'} ({currentUser?.role || 'Senior Underwriting Officer'})
+                {currentUser?.fullName || currentUser?.email || 'Not Signed In'} · {currentUser?.role || 'Insurance Professional'} ({userTier.toUpperCase()})
               </strong>
             </span>
           </div>
 
           <button
             type="submit"
-            disabled={!selectedAction || isSubmitting}
+            disabled={!selectedAction || isSubmitting || (selectedAction === 'Approve' && isRestrictedFromApproval)}
             className="px-5 py-2 rounded-lg bg-brand-teal hover:bg-teal-400 text-background font-semibold text-xs transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Recording Decision...' : 'Commit Underwriting Determination'}
           </button>
         </div>
       </form>
-
-      {/* Decision History Audit Log */}
-      <div className="mt-8 pt-6 border-t border-surface-border">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-petText-muted mb-3">
-          Decision Audit Trail &amp; Regulatory History
-        </h4>
-
-        <div className="space-y-3">
-          {(assessment.decisionHistory || []).map((entry) => (
-            <div
-              key={entry.id}
-              className="p-3.5 rounded-lg bg-surface-elevated/70 border border-surface-border text-xs space-y-1.5"
-            >
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-white">{entry.user}</span>
-                  <span className="text-[10px] text-petText-dim font-mono">({entry.role})</span>
-                  <span className="text-petText-dim">·</span>
-                  <span className="font-mono text-petText-muted text-[11px]">{entry.timestamp}</span>
-                </div>
-                <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-surface-higher text-petText-primary border border-surface-border">
-                  Action: {entry.action}
-                </span>
-              </div>
-
-              <p className="text-petText-secondary leading-relaxed pl-1 border-l-2 border-brand-teal/60">
-                {entry.notes}
-              </p>
-
-              <div className="flex items-center gap-3 text-[10px] text-petText-dim font-mono pt-1">
-                <span>Rule Score at Event: {entry.ruleScoreAtTime}</span>
-                <span>·</span>
-                <span>ML Score at Event: {entry.mlScoreAtTime}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };

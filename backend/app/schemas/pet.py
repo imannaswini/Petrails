@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 class MedicalRecordSchema(BaseModel):
@@ -11,6 +11,8 @@ class MedicalRecordSchema(BaseModel):
     clinicName: str
     veterinarian: str
     notes: Optional[str] = None
+    informationStatus: str = "DECLARED"
+    evidenceReference: Optional[str] = None
 
 class VaccinationRecordSchema(BaseModel):
     id: str
@@ -19,6 +21,8 @@ class VaccinationRecordSchema(BaseModel):
     nextDueDate: str
     batchNumber: str
     status: str = "Up to Date"  # 'Up to Date' | 'Due Soon' | 'Overdue'
+    informationStatus: str = "DECLARED"
+    evidenceReference: Optional[str] = None
 
 class MedicationRecordSchema(BaseModel):
     id: str
@@ -62,7 +66,7 @@ class PetSchema(BaseModel):
     name: str = Field(..., description="Pet given name")
     species: str = Field(default="Dog", description="Species (Dog, Cat, Other)")
     breed: str = Field(..., description="Breed classification")
-    age: int = Field(default=2, description="Age value")
+    age: float = Field(default=2, ge=0.1, le=25, description="Age in years")
     ageUnit: str = Field(default="years", description="years or months")
     sex: str = Field(default="Male", description="Male or Female")
     weightKg: float = Field(default=15.0, description="Weight in kilograms")
@@ -75,14 +79,16 @@ class PetSchema(BaseModel):
     policyStatus: str = Field(default="Under Review", description="Policy status")
     riskLevel: str = Field(default="MEDIUM", description="Actuarial risk level (LOW, MEDIUM, HIGH)")
     riskScore: int = Field(default=50, description="Calculated actuarial risk score (0-100)")
-    location: str = Field(default="Bengaluru, KA", description="City, Region")
+    location: str = Field(default="", description="City, Region")
     ownerName: str = Field(..., description="Pet owner contact name")
-    ownerPhone: str = Field(default="+91 98888 00000", description="Owner contact telephone")
-    registeredVetClinic: str = Field(default="Cessna Lifeline Veterinary Hospital", description="Primary veterinary facility")
+    ownerPhone: str = Field(default="", description="Owner contact telephone")
+    registeredVetClinic: str = Field(default="", description="Primary veterinary facility")
     medicalHistory: List[MedicalRecordSchema] = Field(default_factory=list)
     vaccinations: List[VaccinationRecordSchema] = Field(default_factory=list)
     medications: List[MedicationRecordSchema] = Field(default_factory=list)
     surgeries: List[SurgeryRecordSchema] = Field(default_factory=list)
     policies: List[PolicySummarySchema] = Field(default_factory=list)
     claims: List[ClaimSummarySchema] = Field(default_factory=list)
+    declaredMedicalInformation: Dict[str, Any] = Field(default_factory=dict)
+    createdByUserId: Optional[str] = None
 

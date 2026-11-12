@@ -22,8 +22,9 @@ async function request<T>(
   const url = `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
   
   const token = localStorage.getItem('petrails_auth_token');
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     'Accept': 'application/json',
     ...(options.headers as Record<string, string>),
   };
@@ -37,21 +38,27 @@ async function request<T>(
     headers,
   });
 
-  if (!response.ok) {
-    let errorData: any = null;
+  // Read response text stream exactly once to prevent "body stream already read"
+  const rawText = await response.text();
+  let parsedData: any = null;
+  if (rawText) {
     try {
-      errorData = await response.json();
+      parsedData = JSON.parse(rawText);
     } catch {
-      errorData = await response.text();
+      parsedData = rawText;
     }
+  }
 
+  if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
-    if (typeof errorData?.detail === 'string') {
-      errorMessage = errorData.detail;
-    } else if (Array.isArray(errorData?.detail)) {
-      errorMessage = errorData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
-    } else if (errorData?.message) {
-      errorMessage = errorData.message;
+    if (typeof parsedData?.detail === 'string') {
+      errorMessage = parsedData.detail;
+    } else if (Array.isArray(parsedData?.detail)) {
+      errorMessage = parsedData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+    } else if (parsedData?.message) {
+      errorMessage = parsedData.message;
+    } else if (typeof parsedData === 'string' && parsedData.trim().length > 0) {
+      errorMessage = parsedData;
     }
 
     // Cleanly clear token on 401 Unauthorized to invalidate expired session
@@ -59,15 +66,15 @@ async function request<T>(
       localStorage.removeItem('petrails_auth_token');
     }
 
-    throw new ApiError(response.status, errorMessage, errorData);
+    throw new ApiError(response.status, errorMessage, parsedData);
   }
 
-  // If 204 No Content
-  if (response.status === 204) {
+  // If 204 No Content or empty body
+  if (response.status === 204 || parsedData === null) {
     return {} as T;
   }
 
-  return await response.json();
+  return parsedData as T;
 }
 
 export const apiClient = {
@@ -80,6 +87,16 @@ export const apiClient = {
       {
         method: 'POST',
         body: body ? JSON.stringify(body) : undefined,
+        ...options,
+      }
+    ),
+
+  postForm: <T>(endpoint: string, formData: FormData, options?: RequestInit) =>
+    request<T>(
+      endpoint,
+      {
+        method: 'POST',
+        body: formData,
         ...options,
       }
     ),

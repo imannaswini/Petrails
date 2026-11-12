@@ -1,130 +1,123 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Pet, Assessment, RiskLevel, Species } from '../types';
+import { Pet, CreateAssessmentPayload, Species } from '../types';
 import { PET_IMAGES } from '../data/mockData';
-import { Check, ArrowRight, ArrowLeft, Shield, Stethoscope, Scale } from 'lucide-react';
+import { Check, ArrowRight, ArrowLeft, Shield, Stethoscope, Scale, AlertCircle } from 'lucide-react';
 
 export const NewAssessmentPage: React.FC = () => {
   const navigate = useNavigate();
   const { addNewAssessment } = useApp();
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
     // Step 1: Animal Information
     name: '',
     species: 'Dog' as Species,
-    breed: 'Golden Retriever',
-    ageYears: '3',
+    breed: '',
+    ageYears: '',
     sex: 'Male',
-    weightKg: '28',
-    location: 'Indiranagar, Bengaluru, KA',
-    ownerName: 'Rahul Verma',
-    ownerPhone: '+91 98450 99887',
-    registeredVetClinic: 'Cessna Lifeline Veterinary Hospital',
+    weightKg: '',
+    location: '',
+    ownerName: '',
+    ownerPhone: '',
+    registeredVetClinic: '',
 
     // Step 2: Medical History
-    vaccinations: 'DHPPi + L4 up to date, Nobivac Rabies current until Nov 2025',
-    previousIllnesses: 'None reported in last 24 months',
-    previousSurgeries: 'Elective neutering at 8 months, uneventful recovery',
-    preExistingConditions: 'Mild seasonal atopic dermatitis (controlled with topicals)',
-    currentMedications: 'None',
-    vetHistoryVerified: true,
+    vaccinations: '',
+    previousIllnesses: '',
+    previousSurgeries: '',
+    preExistingConditions: '',
+    allergies: '',
+    currentMedications: '',
 
     // Step 3: Insurance Information
     coverageTier: 'Comprehensive' as 'Essential' | 'Comprehensive' | 'Elite Wellness',
     coverageLimitInr: '300000',
     deductibleInr: '4000',
     copayPercent: '10',
-    previousInsurance: 'Yes (Digit General Insurance, 1 continuous year)',
-    previousClaims: 'No prior claims declared'
+    previousInsurance: '',
+    previousClaims: ''
   });
 
   const handleChange = (field: string, value: any) => {
+    setValidationError(null);
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const calculateScores = () => {
-    // Actuarial synthetic scoring logic
-    let rule = 35;
-    let ml = 38;
-
-    if (formData.species === 'Dog' && ['French Bulldog', 'English Bulldog', 'Pug'].includes(formData.breed)) {
-      rule += 35;
-      ml += 38;
-    } else if (['Golden Retriever', 'German Shepherd'].includes(formData.breed)) {
-      rule += 15;
-      ml += 18;
+  const validateAssessmentInput = (): string | null => {
+    if (!formData.name.trim()) {
+      return 'Pet name is required before running an underwriting assessment.';
     }
-
-    const ageNum = parseInt(formData.ageYears) || 3;
-    if (ageNum > 6) {
-      rule += 15;
-      ml += 14;
+    if (!formData.breed.trim()) return 'Pet breed is required.';
+    const parsedAge = parseFloat(formData.ageYears);
+    if (Number.isNaN(parsedAge) || parsedAge < 0.1 || parsedAge > 25) {
+      return 'Pet age must be between 0.1 and 25 years.';
     }
-
-    if (formData.preExistingConditions.toLowerCase().includes('atopic') || formData.preExistingConditions.toLowerCase().includes('joint')) {
-      rule += 10;
-      ml += 12;
+    const parsedWeight = parseFloat(formData.weightKg);
+    if (Number.isNaN(parsedWeight) || parsedWeight <= 0 || parsedWeight > 150) {
+      return 'Pet weight must be between 0.1 and 150 kg.';
     }
-
-    const combined = Math.min(Math.round(rule * 0.4 + ml * 0.6), 95);
-    const riskLevel: RiskLevel = combined > 70 ? 'HIGH' : combined > 40 ? 'MEDIUM' : 'LOW';
-
-    return { ruleScore: rule, mlScore: ml, combinedScore: combined, riskLevel };
+    if (!formData.ownerName.trim()) {
+      return 'Policyholder owner name is required.';
+    }
+    const limit = Number(formData.coverageLimitInr), deductible = Number(formData.deductibleInr), copay = Number(formData.copayPercent);
+    if (!Number.isFinite(limit) || limit <= 0 || !Number.isFinite(deductible) || deductible < 0 || deductible > limit) return 'Enter a valid coverage limit and deductible.';
+    if (!Number.isFinite(copay) || copay < 0 || copay > 100) return 'Co-payment must be between 0 and 100 percent.';
+    return null;
   };
 
-  const handleRunAssessment = () => {
+  const handleNextStep = () => {
+    if (currentStep === 1) {
+      const err = validateAssessmentInput();
+      if (err) {
+        setValidationError(err);
+        return;
+      }
+    }
+    setValidationError(null);
+    setCurrentStep(prev => prev + 1);
+  };
+
+  const handleRunAssessment = async () => {
+    const err = validateAssessmentInput();
+    if (err) {
+      setValidationError(err);
+      return;
+    }
+
+    setValidationError(null);
     setIsProcessing(true);
 
-    setTimeout(async () => {
-      const scores = calculateScores();
+    try {
+      const petNameClean = formData.name.trim();
       const newPetId = `pet-${Date.now()}`;
-      const newAsmId = `asm-${Date.now()}`;
       const policyId = `PT-${Math.floor(10000 + Math.random() * 90000)}`;
+      const parsedAge = Number(formData.ageYears);
 
       const newPet: Pet = {
         id: newPetId,
-        name: formData.name || 'Simba',
+        name: petNameClean,
         species: formData.species,
         breed: formData.breed,
-        age: parseInt(formData.ageYears) || 3,
+        age: parsedAge,
         ageUnit: 'years',
         sex: formData.sex as 'Male' | 'Female',
-        weightKg: parseFloat(formData.weightKg) || 28,
+        weightKg: Number(formData.weightKg),
         imageUrl: formData.species === 'Dog' ? PET_IMAGES.max : PET_IMAGES.luna,
         policyId: policyId,
         policyStatus: 'Under Review',
-        riskLevel: scores.riskLevel,
-        riskScore: scores.combinedScore,
+        riskLevel: 'MEDIUM',
+        riskScore: 50,
         location: formData.location,
-        ownerName: formData.ownerName,
+        ownerName: formData.ownerName.trim(),
         ownerPhone: formData.ownerPhone,
         registeredVetClinic: formData.registeredVetClinic,
-        medicalHistory: [
-          {
-            id: `med-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            event: 'Pre-Policy Actuarial Veterinary Verification',
-            diagnosis: formData.preExistingConditions || 'Unremarkable medical profile',
-            treatment: 'Baseline wellness assessment',
-            outcome: 'Completed and verified',
-            clinicName: formData.registeredVetClinic,
-            veterinarian: 'Dr. A. K. Sundaram'
-          }
-        ],
-        vaccinations: [
-          {
-            id: `vac-${Date.now()}`,
-            vaccineName: formData.vaccinations,
-            administeredDate: '2024-06-01',
-            nextDueDate: '2025-06-01',
-            batchNumber: 'VET-BATCH-102',
-            status: 'Up to Date'
-          }
-        ],
+        medicalHistory: [],
+        vaccinations: [],
         medications: [],
         surgeries: [],
         policies: [
@@ -132,103 +125,73 @@ export const NewAssessmentPage: React.FC = () => {
             id: `pol-${Date.now()}`,
             policyNumber: policyId,
             tier: formData.coverageTier,
-            annualCoverageLimit: parseInt(formData.coverageLimitInr) || 300000,
-            deductible: parseInt(formData.deductibleInr) || 4000,
-            copayPercent: parseInt(formData.copayPercent) || 10,
-            startDate: new Date().toISOString().split('T')[0],
-            renewalDate: '2025-10-31',
+            annualCoverageLimit: Number(formData.coverageLimitInr),
+            deductible: Number(formData.deductibleInr),
+            copayPercent: Number(formData.copayPercent),
+            startDate: '',
+            renewalDate: '',
             status: 'Under Review'
           }
         ],
-        claims: []
+        claims: [],
+        declaredMedicalInformation: {
+          vaccinationDeclaration: formData.vaccinations,
+          previousIllnesses: formData.previousIllnesses,
+          previousSurgeries: formData.previousSurgeries,
+          preExistingConditions: formData.preExistingConditions,
+          allergies: formData.allergies,
+          currentMedications: formData.currentMedications
+        }
       };
 
-      const newAssessment: Assessment = {
-        id: newAsmId,
+      // Send intake data only; the backend owns scoring, classification, metadata, and timestamps.
+      const newAssessment: CreateAssessmentPayload = {
         petId: newPetId,
-        petName: formData.name || 'Simba',
+        petName: petNameClean,
         breed: formData.breed,
         species: formData.species,
-        ageText: `${formData.ageYears} years`,
+        ageText: `${parsedAge} years`,
+        ageYears: parsedAge,
+        weightKg: Number(formData.weightKg),
         sex: formData.sex,
         policyId: policyId,
-        riskLevel: scores.riskLevel,
-        combinedScore: scores.combinedScore,
-        ruleScore: scores.ruleScore,
-        mlScore: scores.mlScore,
-        modelConfidence: 92,
-        calibrationBand: 'Calibrated ±2.5%',
-        informationGapsCount: 1,
-        informationGaps: [
-          {
-            id: `gap-${Date.now()}`,
-            title: 'Pre-existing Condition Clarification',
-            description: 'Clarification required regarding duration and flare frequency of documented atopic dermatitis.',
-            questions: [
-              'What seasonal triggers induce cutaneous pruritus?',
-              'Has systemic immunosuppressive therapy (e.g. Apoquel or Cytopoint) been administered in the past 12 months?'
-            ],
-            status: 'Pending Request',
-            affectsCalibration: true
-          }
-        ],
-        contributingFactors: [
-          {
-            id: 'nf-1',
-            name: `Breed Actuarial Baseline (${formData.breed})`,
-            impact: 12,
-            category: 'Age & Breed',
-            explanation: 'Historical portfolio incidence rate for selected canine breed profile.',
-            confidence: 91
-          },
-          {
-            id: 'nf-2',
-            name: 'Age bracket evaluation',
-            impact: 8,
-            category: 'Age & Breed',
-            explanation: 'Age risk curve factor under Guidewire actuarial tables.',
-            confidence: 94
-          },
-          {
-            id: 'nf-3',
-            name: 'Vaccination record compliance',
-            impact: -4,
-            category: 'Vaccination',
-            explanation: 'Documented core vaccine booster compliance reduces infectious claims hazard.',
-            confidence: 96
-          }
-        ],
+        informationGapsCount: 0,
+        informationGaps: [],
         status: 'Under Review',
-        lastUpdated: 'Just now',
         underwriterDecision: {
-          recommendation: scores.riskLevel,
+          recommendation: 'Under Review',
           selectedDecision: null,
-          underwriterNotes: 'Initial automated feature extraction completed. Awaiting underwriter review.'
+          underwriterNotes: 'Awaiting underwriter review.'
         },
-        decisionHistory: [
-          {
-            id: `dh-${Date.now()}`,
-            action: 'Condition Added',
-            user: 'Automated Actuarial Pipeline',
-            role: 'Guidewire & PETRAILS Engine',
-            timestamp: 'Just now',
-            notes: 'Intake underwriting workflow ingested application data and extracted actuarial feature matrix.',
-            ruleScoreAtTime: scores.ruleScore,
-            mlScoreAtTime: scores.mlScore
-          }
-        ],
-        imageUrl: newPet.imageUrl
+        imageUrl: newPet.imageUrl,
+        underwritingData: {
+          location: formData.location,
+          ownerName: formData.ownerName.trim(),
+          ownerPhone: formData.ownerPhone,
+          registeredVetClinic: formData.registeredVetClinic,
+          vaccinationDeclaration: formData.vaccinations,
+          previousIllnesses: formData.previousIllnesses,
+          previousSurgeries: formData.previousSurgeries,
+          preExistingConditions: formData.preExistingConditions,
+          allergies: formData.allergies,
+          currentMedications: formData.currentMedications,
+          coverageTier: formData.coverageTier,
+          coverageLimitInr: Number(formData.coverageLimitInr),
+          deductibleInr: Number(formData.deductibleInr),
+          copayPercent: Number(formData.copayPercent),
+          previousInsurance: formData.previousInsurance,
+          previousClaims: formData.previousClaims,
+          medicalInformationStatus: [formData.vaccinations, formData.previousIllnesses, formData.previousSurgeries, formData.preExistingConditions, formData.allergies, formData.currentMedications].some(value => value.trim()) ? 'DECLARED' : 'NOT_PROVIDED'
+        }
       };
 
-      try {
-        await addNewAssessment(newAssessment, newPet);
-        setIsProcessing(false);
-        navigate(`/assessments/${newAsmId}`);
-      } catch (err: any) {
-        setIsProcessing(false);
-        alert(err?.message || 'Failed to save assessment to server. Your entered data is preserved.');
-      }
-    }, 1200);
+      const savedAssessment = await addNewAssessment(newAssessment, newPet);
+      setIsProcessing(false);
+      navigate(`/assessments/${savedAssessment.id}`);
+    } catch (err: any) {
+      setIsProcessing(false);
+      setValidationError(err?.message || 'Failed to save assessment to server. Your entered data is preserved.');
+    }
   };
 
   const steps = [
@@ -249,7 +212,7 @@ export const NewAssessmentPage: React.FC = () => {
           New Risk Assessment
         </h1>
         <p className="text-xs sm:text-sm text-petText-secondary mt-1">
-          Complete the multi-step intake to generate deterministic rule calculations and actuarial ML feature attributions.
+          Submit pet, declared medical, and policy information for backend rule scoring and eligible model inference.
         </p>
       </div>
 
@@ -342,8 +305,9 @@ export const NewAssessmentPage: React.FC = () => {
                 <label className="block text-petText-secondary font-medium mb-1">Age (Years) *</label>
                 <input
                   type="number"
-                  min="0"
-                  max="22"
+                  min="0.1"
+                  max="25"
+                  step="0.1"
                   value={formData.ageYears}
                   onChange={e => handleChange('ageYears', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal"
@@ -366,6 +330,8 @@ export const NewAssessmentPage: React.FC = () => {
                 <label className="block text-petText-secondary font-medium mb-1">Weight (kg) *</label>
                 <input
                   type="number"
+                  min="0.1"
+                  max="150"
                   step="0.1"
                   value={formData.weightKg}
                   onChange={e => handleChange('weightKg', e.target.value)}
@@ -374,13 +340,21 @@ export const NewAssessmentPage: React.FC = () => {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-petText-secondary font-medium mb-1">Location (City &amp; PIN) *</label>
+                <label className="block text-petText-secondary font-medium mb-1">Location (City &amp; PIN) (optional)</label>
                 <input
                   type="text"
                   value={formData.location}
                   onChange={e => handleChange('location', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal"
                 />
+              </div>
+              <div>
+                <label className="block text-petText-secondary font-medium mb-1">Owner Name *</label>
+                <input type="text" value={formData.ownerName} onChange={e => handleChange('ownerName', e.target.value)} className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal" />
+              </div>
+              <div>
+                <label className="block text-petText-secondary font-medium mb-1">Owner Contact (optional)</label>
+                <input type="tel" value={formData.ownerPhone} onChange={e => handleChange('ownerPhone', e.target.value)} placeholder="Phone number" className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal" />
               </div>
             </div>
           </div>
@@ -443,6 +417,10 @@ export const NewAssessmentPage: React.FC = () => {
                   onChange={e => handleChange('currentMedications', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal"
                 />
+              </div>
+              <div>
+                <label className="block text-petText-secondary font-medium mb-1">Allergies</label>
+                <input type="text" value={formData.allergies} onChange={e => handleChange('allergies', e.target.value)} placeholder="Declared allergies, or leave blank if unknown" className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-surface-border text-white text-xs focus:border-brand-teal" />
               </div>
 
               <div>
@@ -546,7 +524,7 @@ export const NewAssessmentPage: React.FC = () => {
                 </p>
               </div>
               <span className="text-xs font-mono text-brand-teal bg-teal-950/60 px-2.5 py-1 rounded border border-teal-800/40">
-                Ready for Assessment
+                Ready to submit
               </span>
             </div>
 
@@ -554,7 +532,7 @@ export const NewAssessmentPage: React.FC = () => {
               {/* Animal Box */}
               <div className="p-4 rounded-xl bg-surface-elevated border border-surface-border space-y-2">
                 <span className="text-[11px] font-mono text-petText-muted uppercase">Animal Profile</span>
-                <p className="font-bold text-white text-sm">{formData.name || 'Simba'}</p>
+                <p className="font-bold text-white text-sm">{formData.name.trim() || 'Unnamed Pet'}</p>
                 <p className="text-petText-secondary">{formData.breed} · {formData.sex}</p>
                 <p className="text-petText-muted">{formData.ageYears} years · {formData.weightKg} kg</p>
                 <p className="text-petText-dim">{formData.location}</p>
@@ -565,7 +543,7 @@ export const NewAssessmentPage: React.FC = () => {
                 <span className="text-[11px] font-mono text-petText-muted uppercase">Clinical Baseline</span>
                 <p className="font-medium text-white">{formData.registeredVetClinic}</p>
                 <p className="text-petText-secondary line-clamp-2">Conditions: {formData.preExistingConditions}</p>
-                <p className="text-emerald-400 font-medium">Vaccines: Verified</p>
+                <p className="text-petText-muted">Vaccination declaration: {formData.vaccinations || 'Not provided'}</p>
               </div>
 
               {/* Policy Box */}
@@ -576,13 +554,13 @@ export const NewAssessmentPage: React.FC = () => {
                 <p className="font-mono text-petText-muted">Deductible: ₹{formData.deductibleInr} ({formData.copayPercent}% copay)</p>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="p-4 rounded-xl bg-surface-higher/40 border border-surface-border text-xs text-petText-secondary space-y-1">
-              <p className="font-semibold text-white">Execution Contract:</p>
-              <p className="leading-relaxed">
-                Clicking <strong>Run Assessment</strong> triggers the PETRAILS dual-engine pipeline. The deterministic rule engine evaluates Guidewire exclusion clauses, while the gradient-boosted ML engine attributes feature weights.
-              </p>
-            </div>
+        {validationError && (
+          <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+            <AlertCircle size={14} className="shrink-0 text-rose-400" />
+            <span>{validationError}</span>
           </div>
         )}
 
@@ -602,7 +580,7 @@ export const NewAssessmentPage: React.FC = () => {
           {currentStep < 4 ? (
             <button
               type="button"
-              onClick={() => setCurrentStep(prev => prev + 1)}
+              onClick={handleNextStep}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-surface-elevated hover:bg-surface-higher border border-surface-border text-white text-xs font-semibold transition-colors"
             >
               <span>Continue</span>

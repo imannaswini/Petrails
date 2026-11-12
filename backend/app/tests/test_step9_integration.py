@@ -17,7 +17,7 @@ from app.api.routes_assessments import list_assessments, TEST_ASSESSMENTS_STORE
 from app.api.routes_claims import list_claims, TEST_CLAIMS_STORE
 from app.api.routes_analytics import get_portfolio_analytics, TEST_METRICS_OVERRIDE
 from app.api.routes_operations import list_information_requests, query_audit_logs, list_notifications
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, create_access_token
 from app.api.routes_auth import register, login, get_current_user_profile
 from app.schemas.auth import RegisterRequest, LoginRequest
 
@@ -52,7 +52,14 @@ def test_api_pet_not_found_raises_404():
 def test_api_assessments_empty_returns_empty_list():
     """Verify list_assessments returns an empty list when no assessments exist."""
     TEST_ASSESSMENTS_STORE.clear()
-    res = run_sync(list_assessments())
+    token_payload = decode_access_token(create_access_token({
+        "sub": "usr-step9",
+        "email": "step9.tester@petrails.insure",
+        "role": "Insurance Professional",
+        "authorityTier": "tier-2",
+        "authorityLimitInr": 500000
+    }))
+    res = run_sync(list_assessments(token_payload))
     assert isinstance(res, list)
     assert len(res) == 0
 
